@@ -23,3 +23,10 @@ class ScanEvent(Base):
     stage = Column(String)
     operator = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True)
+    password = Column(String)
