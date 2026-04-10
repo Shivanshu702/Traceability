@@ -1,0 +1,9 @@
+{
+  "name": "Traceability System",
+  "short_name": "Trace",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": []
+}
