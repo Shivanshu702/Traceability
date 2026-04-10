@@ -1,4 +1,4 @@
-const BASE = "https://your-app.onrender.com";
+const BASE = "https://traceability-backend-4zpe.onrender.com/";
 
 export async function getTray(id) {
   const res = await fetch(`${BASE}/tray/${id}`);
