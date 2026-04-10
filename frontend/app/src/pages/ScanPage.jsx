@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { scanTray, getTray } from "../api/api";
+import QRScanner from "../components/QRScanner";
 
 export default function ScanPage() {
   const [trayId, setTrayId] = useState("");
   const [operator, setOperator] = useState("");
   const [tray, setTray] = useState(null);
   const [error, setError] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
 
   async function loadTray() {
     const data = await getTray(trayId);
@@ -15,6 +17,27 @@ export default function ScanPage() {
 
   async function scan() {
     const data = await scanTray(trayId, operator);
+
+    if (data.error) {
+      setError(
+        data.error +
+          (data.older_trays
+            ? " → Pending: " + data.older_trays.join(", ")
+            : "")
+      );
+      return;
+    }
+
+    setTray(data);
+    setError("");
+  }
+
+  // 🔥 QR SCAN HANDLER
+  async function handleScan(result) {
+    setTrayId(result);
+    setShowScanner(false);
+
+    const data = await scanTray(result, operator);
 
     if (data.error) {
       setError(
@@ -53,11 +76,31 @@ export default function ScanPage() {
           <button style={styles.btn} onClick={loadTray}>
             Load
           </button>
+
           <button style={styles.btnPrimary} onClick={scan}>
             Scan
           </button>
+
+          <button
+            style={styles.btnSecondary}
+            onClick={() => setShowScanner(true)}
+          >
+            📷 Scan QR
+          </button>
         </div>
       </div>
+
+      {showScanner && (
+        <div style={styles.card}>
+          <QRScanner onScan={handleScan} />
+          <button
+            style={styles.btn}
+            onClick={() => setShowScanner(false)}
+          >
+            Close Scanner
+          </button>
+        </div>
+      )}
 
       {error && <p style={styles.error}>{error}</p>}
 
@@ -89,7 +132,7 @@ export default function ScanPage() {
 
 const styles = {
   container: {
-    maxWidth: 400,
+    maxWidth: 420,
     margin: "auto",
     padding: 20,
     fontFamily: "Arial",
@@ -97,48 +140,64 @@ const styles = {
   card: {
     background: "#fff",
     padding: 20,
-    borderRadius: 10,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    borderRadius: 12,
+    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
     marginBottom: 20,
   },
   input: {
     width: "100%",
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 6,
+    padding: 12,
+    marginBottom: 12,
+    borderRadius: 8,
     border: "1px solid #ccc",
+    fontSize: 14,
   },
   buttons: {
     display: "flex",
     gap: 10,
+    flexWrap: "wrap",
   },
   btn: {
     flex: 1,
     padding: 10,
-    borderRadius: 6,
+    borderRadius: 8,
     border: "none",
     background: "#ddd",
+    cursor: "pointer",
   },
   btnPrimary: {
     flex: 1,
     padding: 10,
-    borderRadius: 6,
+    borderRadius: 8,
     border: "none",
     background: "#007bff",
     color: "#fff",
+    cursor: "pointer",
+  },
+  btnSecondary: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+    border: "none",
+    background: "#28a745",
+    color: "#fff",
+    cursor: "pointer",
   },
   error: {
     color: "red",
+    fontWeight: "bold",
   },
   warning: {
     color: "orange",
+    fontWeight: "bold",
   },
   success: {
     color: "green",
+    fontWeight: "bold",
   },
 };
 
-/* 🎯 Stage color */
+/* 🎯 Stage colors */
 
 function getStageStyle(stage) {
   const colors = {
