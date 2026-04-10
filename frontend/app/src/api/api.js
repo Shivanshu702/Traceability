@@ -1,4 +1,4 @@
-const BASE = "http://127.0.0.1:8001";
+const BASE = "https://your-app.onrender.com";
 
 export async function getTray(id) {
   const res = await fetch(`${BASE}/tray/${id}`);
