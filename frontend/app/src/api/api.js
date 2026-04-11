@@ -1,87 +1,83 @@
-const BASE = "https://traceability-backend-4zpe.onrender.com";
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
-// 🔐 Get token
+// ── Token helpers ──────────────────────────────────────────────────────────────
 function getToken() {
-  return localStorage.getItem("token");
+  return localStorage.getItem("token") || "";
 }
 
-// 🔐 Headers with auth
 function authHeaders() {
   return {
     "Content-Type": "application/json",
-    Authorization: "Bearer " + getToken(),
+    Authorization:  "Bearer " + getToken(),
   };
 }
 
-// 🔐 LOGIN
+// ── Generic request ────────────────────────────────────────────────────────────
+async function req(method, path, body) {
+  const opts = { method, headers: authHeaders() };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(`${BASE}${path}`, opts);
+  if (res.status === 401) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("username");
+    window.location.reload();
+    return {};
+  }
+  return res.json();
+}
+
+// ── Auth ───────────────────────────────────────────────────────────────────────
 export async function loginUser(username, password) {
   const res = await fetch(`${BASE}/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ username, password }),
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ username, password }),
   });
-
   return res.json();
 }
 
-// 🔐 REGISTER
-export async function registerUser(username, password) {
+export async function registerUser(username, password, role = "operator") {
   const res = await fetch(`${BASE}/register`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ username, password }),
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ username, password, role }),
   });
-
   return res.json();
 }
 
-// 📦 GET TRAY
-export async function getTray(id) {
-  const res = await fetch(`${BASE}/tray/${id}`, {
-    headers: authHeaders(),
-  });
+// ── Pipeline ───────────────────────────────────────────────────────────────────
+export const getPipeline = () => req("GET", "/pipeline");
 
-  return res.json();
-}
+// ── Trays ──────────────────────────────────────────────────────────────────────
+export const getAllTrays  = (params = {}) =>
+  req("GET", "/trays?" + new URLSearchParams(params));
 
-// 📦 SCAN
-export async function scanTray(id, operator) {
-  const res = await fetch(`${BASE}/scan`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ id, operator }),
-  });
+export const getTray     = (id) => req("GET", `/tray/${id}`);
 
-  return res.json();
-}
+export const createTrays = (trays) => req("POST", "/trays/create", { trays });
 
-// 📊 DASHBOARD
-export async function getAllTrays() {
-  const res = await fetch(`${BASE}/trays`, {
-    headers: authHeaders(),
-  });
+export const deleteTray  = (id) => req("DELETE", `/tray/${id}`);
 
-  return res.json();
-}
+// ── Scan ───────────────────────────────────────────────────────────────────────
+export const scanTray    = (id, operator, next_stage_override = undefined) =>
+  req("POST", "/scan", { id, operator, next_stage_override });
 
-// 🆕 🚨 ALERTS
-export async function getAlerts() {
-  const res = await fetch(`${BASE}/alerts`, {
-    headers: authHeaders(),
-  });
+export const bulkScan    = (ids, operator, next_stage_override = undefined) =>
+  req("POST", "/scan/bulk", { ids, operator, next_stage_override });
 
-  return res.json();
-}
+// ── History & logs ─────────────────────────────────────────────────────────────
+export const getHistory  = (trayId) => req("GET", `/history/${trayId}`);
 
-// 🆕 📊 STAGE LOAD
-export async function getStageLoad() {
-  const res = await fetch(`${BASE}/stage-load`, {
-    headers: authHeaders(),
-  });
+export const getScanLog  = (limit = 200) =>
+  req("GET", `/scan-log?limit=${limit}`);
 
-  return res.json();
-}
+// ── Stats / alerts / analytics ─────────────────────────────────────────────────
+export const getStats     = () => req("GET", "/stats");
+export const getAlerts    = () => req("GET", "/alerts");
+export const getStageLoad = () => req("GET", "/stage-load");
+export const getAnalytics = () => req("GET", "/analytics");
+
+// ── Audit log (admin) ──────────────────────────────────────────────────────────
+export const getAuditLog  = (limit = 100) =>
+  req("GET", `/audit-log?limit=${limit}`);

@@ -1,56 +1,60 @@
-from services.analytics_service import detect_bottlenecks, stage_load
-from sqlalchemy import Column, String, Boolean, DateTime, Integer
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text
 from database import Base
 from datetime import datetime
+
 
 class Tray(Base):
     __tablename__ = "trays"
 
-    id = Column(String, primary_key=True, index=True)
-    stage = Column(String, default="CREATED")
-    is_done = Column(Boolean, default=False)
-
+    id              = Column(String, primary_key=True, index=True)
+    stage           = Column(String, default="CREATED", index=True)
+    is_done         = Column(Boolean, default=False)
     is_split_parent = Column(Boolean, default=False)
-    parent_id = Column(String, nullable=True)
+    parent_id       = Column(String, nullable=True, index=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Project / batch info
+    project         = Column(String, default="", index=True)
+    shift           = Column(String, default="")
+    created_by      = Column(String, default="")
+    batch_no        = Column(String, default="")
+    total_units     = Column(Integer, default=450)
 
-    # 🆕 TRACK LAST MOVEMENT
-    last_updated = Column(DateTime, default=datetime.utcnow)
+    # FIFO flag
+    fifo_violated   = Column(Boolean, default=False)
+
+    # Timestamps
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    last_updated    = Column(DateTime, default=datetime.utcnow, index=True)
+    completed_at    = Column(DateTime, nullable=True)
 
 
 class ScanEvent(Base):
     __tablename__ = "scan_events"
 
-    id = Column(Integer, primary_key=True, index=True)
-    tray_id = Column(String)
-    stage = Column(String)
-    operator = Column(String)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    id          = Column(String, primary_key=True)       # UUID string
+    tray_id     = Column(String, index=True)
+    from_stage  = Column(String, default="")
+    stage       = Column(String)                         # to_stage
+    operator    = Column(String, default="SYSTEM")
+    fifo_flag   = Column(Boolean, default=False)
+    note        = Column(Text, default="")
+    timestamp   = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True)
+    id       = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
     password = Column(String)
+    role     = Column(String, default="operator")        # "admin" | "operator"
 
-# 🚨 BOTTLENECK ALERTS
-@router.get("/alerts")
-def get_alerts(user: str = Depends(get_current_user)):
-    db = SessionLocal()
 
-    bottlenecks = detect_bottlenecks(db)
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
 
-    return {
-        "alerts": bottlenecks,
-        "count": len(bottlenecks)
-    }
-
-# 📊 STAGE LOAD (for bottleneck view)
-@router.get("/stage-load")
-def get_stage_load(user: str = Depends(get_current_user)):
-    db = SessionLocal()
-
-    return stage_load(db)
+    id        = Column(Integer, primary_key=True, index=True)
+    username  = Column(String, index=True)
+    action    = Column(String)
+    details   = Column(String, default="")
+    timestamp = Column(DateTime, default=datetime.utcnow)
