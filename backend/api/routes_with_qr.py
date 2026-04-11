@@ -11,8 +11,8 @@ from services.qr_service import generate_qr_base64, generate_qr_bytes
 from core.stages import STAGES, STAGE_COLORS, PROJECTS, BRANCH_OPTIONS, get_units_for_project
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from typing import Optional
+import bcrypt
 import os
 import uuid
 
@@ -21,10 +21,14 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-in-production")
 ALGORITHM  = "HS256"
 TOKEN_TTL  = 60
 security    = HTTPBearer()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def hash_password(p): return pwd_context.hash(p[:72])
-def verify_password(plain, hashed): return pwd_context.verify(plain[:72], hashed)
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") 
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password[:72].encode(), bcrypt.gensalt()).decode()
+ 
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain[:72].encode(), hashed.encode())
 
 def create_token(user):
     return jwt.encode({"sub": user.username, "role": user.role,
