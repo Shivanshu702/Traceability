@@ -1,4 +1,4 @@
-# ── Full pipeline — ported from Code.gs ───────────────────────────────────────
+
 
 STAGES = [
     {"id": "CREATED",    "label": "Label Printed",             "next": "RACK1_TOP"},

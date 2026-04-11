@@ -1,3 +1,4 @@
+import CreateTraysPage from "./pages/CreateTraysPage";
 import { useState, useEffect } from "react";
 import ScanPage      from "./pages/ScanPage";
 import HistoryPage   from "./pages/HistoryPage";
@@ -47,7 +48,7 @@ export default function App() {
       <header className="hdr">
         <span className="hdr-title">⚙ Traceability System</span>
         <span className="hdr-sub">{user.username}</span>
-        <span className="hdr-sub" style={{ background: isAdmin ? "rgba(226,75,74,.2)", color: "#F09595" }}>
+        <span className="hdr-sub" style={{ background: isAdmin ? "rgba(226,75,74,.2)" : "transparent", color: "#F09595" }}>
           {user.role}
         </span>
         <button
@@ -70,6 +71,9 @@ export default function App() {
         <button className={`nb ${page === "history"    ? "on" : ""}`} onClick={() => setPage("history")}>
           📋 History
         </button>
+        <button className={`nb ${page === "create" ? "on" : ""}`} onClick={() => setPage("create")}>
+            ➕ Create Trays
+          </button>
         {isAdmin && (
           <button className={`nb ${page === "alerts" ? "on" : ""}`} onClick={() => setPage("alerts")}>
             🚨 Alerts
@@ -82,6 +86,7 @@ export default function App() {
         {page === "dashboard" && <Dashboard />}
         {page === "scan"      && <ScanPage  />}
         {page === "history"   && <HistoryPage />}
+        {page === "create" && <CreateTraysPage />}
         {page === "alerts"    && isAdmin && <AlertDashboard />}
       </main>
     </div>

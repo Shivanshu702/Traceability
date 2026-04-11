@@ -128,7 +128,7 @@ export default function Dashboard() {
 
   // Group active trays by stage
   const activeTrays = trays.filter((t) => t.stage !== "COMPLETE" && t.stage !== "SPLIT");
-  const byStage: Record<string, typeof trays> = {};
+  const byStage = {};
   activeTrays.forEach((t) => {
     byStage[t.stage] = byStage[t.stage] || [];
     byStage[t.stage].push(t);

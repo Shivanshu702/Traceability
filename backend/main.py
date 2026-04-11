@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import Base, engine
-from api.routes import router
+from api.routes_with_qr import router
 
 app = FastAPI(title="FIFO Traceability API", version="2.0.0")
 
