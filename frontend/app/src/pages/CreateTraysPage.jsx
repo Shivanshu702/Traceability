@@ -29,7 +29,7 @@ export default function CreateTraysPage() {
     setCreated([]);
 
     // Build tray IDs: PREFIX-timestamp-001, PREFIX-timestamp-002 ...
-    const ts   = Date.now();
+    const ts   = Date.now() + Math.floor(Math.random() * 1000);
     const trays = Array.from({ length: count }, (_, i) => ({
       id:         `${prefix}-${ts}-${String(i + 1).padStart(3, "0")}`,
       project,
