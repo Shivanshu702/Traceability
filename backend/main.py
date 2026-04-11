@@ -7,7 +7,8 @@ app = FastAPI(title="FIFO Traceability API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["traceability-5juam0rny-shivanshu702s-projects.vercel.app",
+    allow_origins=["https://traceability-5juam0rny-shivanshu702s-projects.vercel.app",
+                   "https://traceability-git-main-shivanshu702s-projects.vercel.app",
                    "http://localhost:5173"],        # keep for local dev
     allow_methods=["*"],
     allow_headers=["*"],
