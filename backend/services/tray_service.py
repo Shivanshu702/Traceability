@@ -2,6 +2,7 @@ from models import Tray
 from core.stages import STAGES, SPLIT_STAGE
 from services.fifo_service import check_fifo_violation
 from services.log_service import log_scan
+from datetime import datetime
 
 def advance_tray(db, tray: Tray, operator="SYSTEM"):
 
@@ -21,17 +22,20 @@ def advance_tray(db, tray: Tray, operator="SYSTEM"):
     if tray.stage == SPLIT_STAGE:
         tray.is_split_parent = True
         tray.stage = "SPLIT_DONE"
+        tray.last_updated = datetime.utcnow()
 
         trayA = Tray(
             id=f"{tray.id}-A",
             stage="BAT_MOUNT",
-            parent_id=tray.id
+            parent_id=tray.id,
+            last_updated=datetime.utcnow()
         )
 
         trayB = Tray(
             id=f"{tray.id}-B",
             stage="BAT_MOUNT",
-            parent_id=tray.id
+            parent_id=tray.id,
+            last_updated=datetime.utcnow()
         )
 
         db.add_all([trayA, trayB])
@@ -44,6 +48,7 @@ def advance_tray(db, tray: Tray, operator="SYSTEM"):
 
     if current_index < len(STAGES) - 1:
         tray.stage = STAGES[current_index + 1]
+        tray.last_updated = datetime.utcnow()
 
         if tray.stage == "COMPLETE":
             tray.is_done = True

@@ -67,3 +67,21 @@ export async function getAllTrays() {
 
   return res.json();
 }
+
+// 🆕 🚨 ALERTS
+export async function getAlerts() {
+  const res = await fetch(`${BASE}/alerts`, {
+    headers: authHeaders(),
+  });
+
+  return res.json();
+}
+
+// 🆕 📊 STAGE LOAD
+export async function getStageLoad() {
+  const res = await fetch(`${BASE}/stage-load`, {
+    headers: authHeaders(),
+  });
+
+  return res.json();
+}

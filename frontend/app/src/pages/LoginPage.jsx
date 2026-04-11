@@ -11,10 +11,12 @@ export default function LoginPage({ onLogin }) {
 
     if (isRegister) {
       data = await registerUser(username, password);
+
       if (data.error) {
         alert(data.error);
         return;
       }
+
       alert("User created. Now login.");
       setIsRegister(false);
       return;
@@ -27,10 +29,10 @@ export default function LoginPage({ onLogin }) {
       return;
     }
 
-    // 🔥 STORE TOKEN
     localStorage.setItem("token", data.access_token);
+    localStorage.setItem("role", data.role); // 🔥 store role
 
-    onLogin(username);
+    onLogin({ username, role: data.role });
   }
 
   return (

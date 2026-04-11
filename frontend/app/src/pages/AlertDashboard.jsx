@@ -1,53 +1,29 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { getAlerts, getStageLoad } from "../api/api";
 
 export default function AlertDashboard() {
   const [alerts, setAlerts] = useState([]);
   const [load, setLoad] = useState({});
-  const [hasCritical, setHasCritical] = useState(false);
-
-  const audioRef = useRef(null);
-  const prevAlertCount = useRef(0);
 
   async function fetchData() {
     const alertData = await getAlerts();
     const loadData = await getStageLoad();
 
-    const newAlerts = alertData.alerts || [];
-
-    // 🔊 PLAY SOUND if new alert appears
-    if (newAlerts.length > prevAlertCount.current) {
-      if (audioRef.current) {
-        audioRef.current.play().catch(() => {});
-      }
-    }
-
-    prevAlertCount.current = newAlerts.length;
-
-    // 🔴 CHECK CRITICAL (delay > 120 sec)
-    const critical = newAlerts.some(a => a.delay_seconds > 120);
-
-    setHasCritical(critical);
-    setAlerts(newAlerts);
+    setAlerts(alertData.alerts || []);
     setLoad(loadData || {});
   }
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000);
+    const interval = setInterval(fetchData, 5000); // auto refresh
     return () => clearInterval(interval);
   }, []);
 
   return (
     <div style={styles.container}>
-      <h2 style={hasCritical ? styles.blink : {}}>
-        🚨 Factory Alerts Dashboard
-      </h2>
+      <h2>🚨 Factory Alerts Dashboard</h2>
 
-      {/* 🔊 AUDIO */}
-      <audio ref={audioRef} src="/alert.mp3" preload="auto" />
-
-      {/* 🔴 ALERTS */}
+      {/* 🔴 ALERT SECTION */}
       <div style={styles.card}>
         <h3>⚠️ Bottleneck Alerts</h3>
 
@@ -55,13 +31,7 @@ export default function AlertDashboard() {
           <p style={{ color: "green" }}>✅ No bottlenecks</p>
         ) : (
           alerts.map((a, i) => (
-            <div
-              key={i}
-              style={{
-                ...styles.alertBox,
-                ...(a.delay_seconds > 120 ? styles.critical : {})
-              }}
-            >
+            <div key={i} style={styles.alertBox}>
               <b>{a.tray_id}</b> stuck at <b>{a.stage}</b>
               <br />
               Delay: {a.delay_seconds}s
@@ -74,6 +44,8 @@ export default function AlertDashboard() {
       <div style={styles.card}>
         <h3>📊 Stage Load</h3>
 
+        {Object.keys(load).length === 0 && <p>No active trays</p>}
+
         {Object.entries(load).map(([stage, count]) => (
           <div key={stage} style={styles.loadRow}>
             <span>{stage}</span>
@@ -84,7 +56,7 @@ export default function AlertDashboard() {
                   ...styles.bar,
                   width: `${count * 40}px`,
                   background:
-                    count > 5 ? "red" : count > 3 ? "orange" : "green"
+                    count > 5 ? "red" : count > 3 ? "orange" : "green",
                 }}
               />
             </div>
@@ -97,15 +69,12 @@ export default function AlertDashboard() {
   );
 }
 
-/* 🎨 STYLES */
-
 const styles = {
   container: {
     maxWidth: 700,
     margin: "auto",
     padding: 20,
   },
-
   card: {
     background: "#fff",
     padding: 20,
@@ -113,53 +82,27 @@ const styles = {
     marginBottom: 20,
     boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
   },
-
   alertBox: {
     background: "#ffe5e5",
-    padding: 12,
+    padding: 10,
     borderRadius: 8,
     marginBottom: 10,
     borderLeft: "5px solid red",
-    transition: "all 0.3s ease",
   },
-
-  // 🔴 CRITICAL BLINK
-  critical: {
-    animation: "blink 1s infinite",
-    borderLeft: "5px solid darkred",
-    background: "#ffcccc",
-  },
-
-  blink: {
-    animation: "blink 1s infinite",
-  },
-
   loadRow: {
     display: "flex",
     alignItems: "center",
     gap: 10,
     marginBottom: 10,
   },
-
   barContainer: {
     flex: 1,
     background: "#eee",
     height: 10,
     borderRadius: 5,
   },
-
   bar: {
     height: 10,
     borderRadius: 5,
   },
 };
-
-/* 🔥 GLOBAL CSS INJECTION */
-const styleSheet = document.styleSheets[0];
-styleSheet.insertRule(`
-@keyframes blink {
-  0% { opacity: 1; }
-  50% { opacity: 0.3; }
-  100% { opacity: 1; }
-}
-`, styleSheet.cssRules.length);

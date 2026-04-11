@@ -3,17 +3,15 @@ import ScanPage from "./pages/ScanPage";
 import HistoryPage from "./pages/HistoryPage";
 import Dashboard from "./pages/Dashboard";
 import LoginPage from "./pages/LoginPage";
+import AlertDashboard from "./pages/AlertDashboard";
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("scan");
 
-  // 🔐 Auto login if token exists
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (token) {
-      setUser("User");
-    }
+    if (token) setUser("User");
   }, []);
 
   function logout() {
@@ -29,14 +27,18 @@ export default function App() {
     <div style={{ padding: 20 }}>
       <h1>Traceability System</h1>
 
-      <button onClick={() => setPage("scan")}>Scan</button>
-      <button onClick={() => setPage("history")}>History</button>
-      <button onClick={() => setPage("dashboard")}>Dashboard</button>
-      <button onClick={logout}>Logout</button>
+      <div style={{ marginBottom: 20 }}>
+        <button onClick={() => setPage("scan")}>Scan</button>
+        <button onClick={() => setPage("history")}>History</button>
+        <button onClick={() => setPage("dashboard")}>Dashboard</button>
+        <button onClick={() => setPage("alerts")}>🚨 Alerts</button>
+        <button onClick={logout}>Logout</button>
+      </div>
 
       {page === "scan" && <ScanPage />}
       {page === "history" && <HistoryPage />}
       {page === "dashboard" && <Dashboard />}
+      {page === "alerts" && <AlertDashboard />}
     </div>
   );
 }

@@ -1,97 +1,97 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from database import SessionLocal
-from models import Tray, ScanEvent, User
+from models import Tray, ScanEvent, User, AuditLog
 from services.tray_service import advance_tray
+from services.audit_service import log_action
 from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
 
 router = APIRouter()
 
-# 🔐 CONFIG
 SECRET_KEY = "MYSECRETKEY"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-# 🔐 UTILS
-
 def hash_password(password: str):
-    return pwd_context.hash(password)
+    return pwd_context.hash(password[:72])
 
 
 def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(plain[:72], hashed)
 
 
-def create_token(username: str):
+def create_token(user: User):
     payload = {
-        "sub": username,
-        "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        "sub": user.username,
+        "role": user.role,
+        "exp": datetime.utcnow() + timedelta(minutes=60)
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload["sub"]
+        return jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
     except:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-# 🔐 REGISTER
+def require_admin(user=Depends(get_current_user)):
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return user
+
+
+# 🔐 AUTH
+
 @router.post("/register")
 def register(payload: dict):
     db = SessionLocal()
 
-    existing = db.query(User).filter(
-        User.username == payload["username"]
-    ).first()
-
-    if existing:
+    if db.query(User).filter(User.username == payload["username"]).first():
         return {"error": "User already exists"}
 
     user = User(
         username=payload["username"],
-        password=hash_password(payload["password"])
+        password=hash_password(payload["password"]),
+        role=payload.get("role", "operator")
     )
 
     db.add(user)
     db.commit()
 
+    log_action(db, payload["username"], "REGISTER")
+    db.commit()
+
     return {"message": "User created"}
 
 
-# 🔐 LOGIN → returns JWT
 @router.post("/login")
 def login(payload: dict):
     db = SessionLocal()
 
-    user = db.query(User).filter(
-        User.username == payload["username"]
-    ).first()
+    user = db.query(User).filter(User.username == payload["username"]).first()
 
     if not user or not verify_password(payload["password"], user.password):
         return {"error": "Invalid credentials"}
 
-    token = create_token(user.username)
+    token = create_token(user)
 
-    return {
-        "access_token": token,
-        "token_type": "bearer"
-    }
+    log_action(db, user.username, "LOGIN")
+    db.commit()
+
+    return {"access_token": token, "role": user.role}
 
 
-# 🟢 GET TRAY (protected)
+# 📦 TRAY
+
 @router.get("/tray/{tray_id}")
-def get_tray(tray_id: str, user: str = Depends(get_current_user)):
+def get_tray(tray_id: str, user=Depends(get_current_user)):
     db = SessionLocal()
 
     tray = db.query(Tray).filter(Tray.id == tray_id).first()
@@ -105,38 +105,62 @@ def get_tray(tray_id: str, user: str = Depends(get_current_user)):
     return tray
 
 
-# 🟢 SCAN (protected)
 @router.post("/scan")
-def scan(payload: dict, user: str = Depends(get_current_user)):
+def scan(payload: dict, user=Depends(get_current_user)):
     db = SessionLocal()
 
     tray = db.query(Tray).filter(Tray.id == payload["id"]).first()
-
     if not tray:
         return {"error": "Tray not found"}
 
-    result = advance_tray(db, tray, user)
+    result = advance_tray(db, tray, user["sub"])
 
     db.commit()
     db.refresh(tray)
 
+    log_action(db, user["sub"], "SCAN", f"{tray.id}:{tray.stage}")
+    db.commit()
+
     return tray if not isinstance(result, dict) else result
 
 
-# 🟢 HISTORY (protected)
-@router.get("/history/{tray_id}")
-def get_history(tray_id: str, user: str = Depends(get_current_user)):
+# 🔥 ANALYTICS WITH TIME
+
+@router.get("/analytics")
+def analytics(user=Depends(require_admin)):
     db = SessionLocal()
 
-    events = db.query(ScanEvent).filter(
-        ScanEvent.tray_id == tray_id
-    ).all()
+    trays = db.query(Tray).all()
 
-    return events
+    total = len(trays)
+    completed = [t for t in trays if t.completed_at]
+    wip = total - len(completed)
 
+    # 🔥 AVG CYCLE TIME
+    cycle_times = []
+    for t in completed:
+        if t.started_at and t.completed_at:
+            diff = (t.completed_at - t.started_at).total_seconds()
+            cycle_times.append(diff)
 
-# 🟢 DASHBOARD (protected)
-@router.get("/trays")
-def get_all_trays(user: str = Depends(get_current_user)):
-    db = SessionLocal()
-    return db.query(Tray).all()
+    avg_cycle = sum(cycle_times) / len(cycle_times) if cycle_times else 0
+
+    # 🔥 STAGE TIME (approx via scan logs)
+    stage_time = {}
+    events = db.query(ScanEvent).order_by(ScanEvent.timestamp).all()
+
+    for i in range(len(events) - 1):
+        curr = events[i]
+        nxt = events[i + 1]
+
+        if curr.tray_id == nxt.tray_id:
+            diff = (nxt.timestamp - curr.timestamp).total_seconds()
+            stage_time[curr.stage] = stage_time.get(curr.stage, 0) + diff
+
+    return {
+        "total": total,
+        "completed": len(completed),
+        "wip": wip,
+        "avg_cycle_time_sec": avg_cycle,
+        "stage_time": stage_time
+    }

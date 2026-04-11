@@ -1,3 +1,4 @@
+from services.analytics_service import detect_bottlenecks, stage_load
 from sqlalchemy import Column, String, Boolean, DateTime, Integer
 from database import Base
 from datetime import datetime
@@ -14,6 +15,9 @@ class Tray(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # 🆕 TRACK LAST MOVEMENT
+    last_updated = Column(DateTime, default=datetime.utcnow)
+
 
 class ScanEvent(Base):
     __tablename__ = "scan_events"
@@ -24,9 +28,29 @@ class ScanEvent(Base):
     operator = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True)
     password = Column(String)
+
+# 🚨 BOTTLENECK ALERTS
+@router.get("/alerts")
+def get_alerts(user: str = Depends(get_current_user)):
+    db = SessionLocal()
+
+    bottlenecks = detect_bottlenecks(db)
+
+    return {
+        "alerts": bottlenecks,
+        "count": len(bottlenecks)
+    }
+
+# 📊 STAGE LOAD (for bottleneck view)
+@router.get("/stage-load")
+def get_stage_load(user: str = Depends(get_current_user)):
+    db = SessionLocal()
+
+    return stage_load(db)
