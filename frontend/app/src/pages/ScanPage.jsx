@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { scanTray, getTray } from "../api/api";
 import QRScanner from "../components/QRScanner";
 
@@ -10,50 +10,140 @@ export default function ScanPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [branch,      setBranch]      = useState(null);
+  const [success,     setSuccess]     = useState("");
 
   const BRANCH_OPTIONS = [
     { id: "BAT_SOL_R", label: "Battery Soldered by Robot", icon: "🤖" },
     { id: "BAT_SOL_M", label: "Battery Soldered by Hand",  icon: "✋" },
   ];
 
-  async function loadTray() {
-    if (!trayId.trim()) return;
+  // ── Auto-load tray from ?scan= URL parameter ─────────────────────────────
+  useEffect(() => {
+    const params  = new URLSearchParams(window.location.search);
+    const scanId  = params.get("scan");
+    if (scanId) {
+      setTrayId(scanId.toUpperCase());
+      // Clean the URL so refreshing doesn't re-trigger
+      window.history.replaceState({}, "", window.location.pathname);
+      // Auto-load the tray info
+      autoLoad(scanId.toUpperCase());
+    }
+  }, []);
+
+  async function autoLoad(id) {
     setLoading(true);
     setError("");
-    const data = await getTray(trayId.trim().toUpperCase());
-    setLoading(false);
-    if (data.detail || data.error) {
-      setError(data.detail || data.error);
-      setTray(null);
-    } else {
-      setTray(data);
-      setBranch(null);
+    setSuccess("");
+    try {
+      const data = await getTray(id);
+      if (data.detail || data.error) {
+        setError(data.detail || data.error);
+        setTray(null);
+      } else {
+        setTray(data);
+        setBranch(null);
+      }
+    } catch {
+      setError("Cannot reach server.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadTray() {
+    const id = trayId.trim().toUpperCase();
+    if (!id) return;
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const data = await getTray(id);
+      if (data.detail || data.error) {
+        setError(data.detail || data.error);
+        setTray(null);
+      } else {
+        setTray(data);
+        setBranch(null);
+      }
+    } catch {
+      setError("Cannot reach server.");
+    } finally {
+      setLoading(false);
     }
   }
 
   async function doScan(id, override) {
-    if (!operator.trim()) { setError("Please enter operator name."); return; }
+    const op = operator.trim();
+    if (!op) { setError("Please enter your operator name."); return; }
+
     setLoading(true);
     setError("");
-    const data = await scanTray(
-      (id || trayId).trim().toUpperCase(),
-      operator.trim(),
-      override || undefined
-    );
-    setLoading(false);
-    if (data.error) {
-      setError(data.error + (data.older_trays ? " → Pending: " + data.older_trays.join(", ") : ""));
-      return;
+    setSuccess("");
+
+    try {
+      const data = await scanTray(
+        (id || trayId).trim().toUpperCase(),
+        op,
+        override || undefined
+      );
+
+      if (data.error) {
+        setError(
+          data.error +
+          (data.older_trays ? " → Pending: " + data.older_trays.join(", ") : "")
+        );
+        return;
+      }
+
+      // Success
+      const updatedTray = data.tray || data;
+      setTray(updatedTray);
+      setBranch(null);
+
+      if (data.is_split) {
+        setSuccess(`✂ Tray split into ${data.child_a} and ${data.child_b}`);
+      } else {
+        setSuccess(`✅ Moved to: ${data.to_label || updatedTray.stage}`);
+      }
+
+      if (data.fifo_vio) {
+        setError("⚠ FIFO violation logged — older trays were waiting: " +
+          (data.older_trays || []).join(", "));
+      }
+    } catch {
+      setError("Cannot reach server.");
+    } finally {
+      setLoading(false);
     }
-    setTray(data.tray || data);
-    setBranch(null);
-    setError("");
   }
 
   async function handleQRScan(result) {
-    setTrayId(result);
+    const id = result.trim().toUpperCase();
+
+    // QR might encode the full URL — extract just the ID
+    const extracted = extractTrayId(id);
+
+    setTrayId(extracted);
     setShowScanner(false);
-    await doScan(result);
+    await autoLoad(extracted);
+  }
+
+  // Handles both plain IDs and full URLs like https://...?scan=TRY-001
+  function extractTrayId(raw) {
+    try {
+      const url    = new URL(raw);
+      const param  = url.searchParams.get("scan");
+      if (param) return param.toUpperCase();
+    } catch {}
+    return raw.toUpperCase();
+  }
+
+  function reset() {
+    setTrayId("");
+    setTray(null);
+    setError("");
+    setSuccess("");
+    setBranch(null);
   }
 
   const isBranch      = tray && tray.stage === "BAT_MOUNT";
@@ -64,54 +154,73 @@ export default function ScanPage() {
     <div style={styles.container}>
       <h2 style={{ color: "#E8EFF8", marginBottom: 20 }}>📦 Scan Tray</h2>
 
-      {/* Input card */}
-      <div style={styles.card}>
-        <input
-          style={styles.input}
-          placeholder="Tray ID (e.g. TRY-001)"
-          value={trayId}
-          onChange={(e) => setTrayId(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === "Enter" && loadTray()}
-        />
-        <input
-          style={styles.input}
-          placeholder="Operator name"
-          value={operator}
-          onChange={(e) => setOperator(e.target.value)}
-        />
-        <div style={styles.buttons}>
-          <button style={styles.btn} onClick={loadTray} disabled={loading}>
-            {loading ? "…" : "Load"}
-          </button>
-          <button style={styles.btnPrimary} onClick={() => doScan()} disabled={loading || isBranch}>
-            {loading ? "…" : "Scan"}
-          </button>
-          <button style={styles.btnGreen} onClick={() => setShowScanner(true)}>
-            📷 Scan QR
-          </button>
+      {/* ── Input card ── */}
+      {!tray && (
+        <div style={styles.card}>
+          <input
+            style={styles.input}
+            placeholder="Tray ID (e.g. TRY-001)"
+            value={trayId}
+            onChange={(e) => setTrayId(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && loadTray()}
+          />
+          <input
+            style={styles.input}
+            placeholder="Your name (operator)"
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+          />
+          <div style={styles.buttons}>
+            <button style={styles.btn} onClick={loadTray} disabled={loading || !trayId.trim()}>
+              {loading ? "…" : "Load"}
+            </button>
+            <button
+              style={styles.btnPrimary}
+              onClick={() => doScan()}
+              disabled={loading || !trayId.trim() || isBranch}
+            >
+              {loading ? "…" : "Scan"}
+            </button>
+            <button style={styles.btnGreen} onClick={() => setShowScanner(true)}>
+              📷 Scan QR
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* QR Scanner */}
+      {/* ── QR Scanner ── */}
       {showScanner && (
         <div style={styles.card}>
           <QRScanner onScan={handleQRScan} />
-          <button style={styles.btn} onClick={() => setShowScanner(false)}>
+          <button style={{ ...styles.btn, marginTop: 10, width: "100%" }}
+            onClick={() => setShowScanner(false)}>
             Close Scanner
           </button>
         </div>
       )}
 
-      {/* Error */}
-      {error && (
-        <div style={styles.errorBox}>{error}</div>
+      {/* ── Loading indicator ── */}
+      {loading && (
+        <div style={{ textAlign: "center", color: "#6B7E95", padding: 20 }}>
+          <span style={styles.spinner} /> Loading…
+        </div>
       )}
 
-      {/* Tray info */}
-      {tray && (
+      {/* ── Error ── */}
+      {error && <div style={styles.errorBox}>{error}</div>}
+
+      {/* ── Success ── */}
+      {success && <div style={styles.okBox}>{success}</div>}
+
+      {/* ── Tray card ── */}
+      {tray && !loading && (
         <div style={styles.card}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "#E8EFF8" }}>
+
+          {/* Tray header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10,
+                        marginBottom: 14, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "monospace", fontSize: 20,
+                           fontWeight: 700, color: "#E8EFF8" }}>
               {tray.id}
             </span>
             {tray.parent_id && (
@@ -122,82 +231,112 @@ export default function ScanPage() {
             )}
           </div>
 
-          <p style={{ marginBottom: 8, color: "#6B7E95", fontSize: 13 }}>
-            Stage: <span style={{ ...getStageStyle(tray.stage), fontWeight: 700 }}>{tray.stage}</span>
+          {/* Stage */}
+          <p style={{ marginBottom: 10, color: "#6B7E95", fontSize: 13 }}>
+            Stage:{" "}
+            <span style={{ ...getStageStyle(tray.stage), fontWeight: 700 }}>
+              {tray.stage}
+            </span>
           </p>
 
+          {/* FIFO warning */}
           {tray.fifo_violated && (
-            <div style={styles.warnBox}>⚠ FIFO violation flagged on this tray</div>
+            <div style={styles.warnBox}>⚠ FIFO violation was flagged on this tray</div>
           )}
 
+          {/* Split parent */}
           {isSplitParent && (
             <div style={styles.warnBox}>
-              ✂ This tray has been split into{" "}
+              ✂ This tray was split into{" "}
               <strong>{tray.id}-A</strong> and <strong>{tray.id}-B</strong>.
               Scan each child separately.
             </div>
           )}
 
+          {/* Complete */}
           {isDone && (
             <div style={styles.okBox}>✅ This tray is complete!</div>
           )}
 
-          {/* Branch selection */}
-          {isBranch && !isDone && (
-            <div style={{ marginTop: 14 }}>
-              <p style={{ color: "#FAC775", fontSize: 13, marginBottom: 10 }}>
-                ⚡ Select soldering method to continue:
-              </p>
-              {BRANCH_OPTIONS.map((b) => (
+          {/* Operator input (shown when tray is loaded) */}
+          {!isDone && !isSplitParent && (
+            <>
+              <input
+                style={{ ...styles.input, marginTop: 12 }}
+                placeholder="Your name (operator)"
+                value={operator}
+                onChange={(e) => setOperator(e.target.value)}
+              />
+
+              {/* Branch selection */}
+              {isBranch && (
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ color: "#FAC775", fontSize: 13, marginBottom: 10 }}>
+                    ⚡ Select soldering method:
+                  </p>
+                  {BRANCH_OPTIONS.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => setBranch(b.id)}
+                      style={{
+                        ...styles.branchBtn,
+                        border: branch === b.id
+                          ? "2px solid #378ADD" : "1px solid #1E2D42",
+                        background: branch === b.id
+                          ? "rgba(55,138,221,.08)" : "#111827",
+                      }}
+                    >
+                      <span style={{ fontSize: 22 }}>{b.icon}</span>
+                      <span style={{ fontWeight: 700, color: "#E8EFF8" }}>
+                        {b.label}
+                      </span>
+                    </button>
+                  ))}
+                  <button
+                    style={{
+                      ...styles.btnPrimary, width: "100%",
+                      marginTop: 10, padding: 14, fontSize: 15,
+                      opacity: (!branch || loading) ? 0.5 : 1,
+                    }}
+                    onClick={() => doScan(null, branch)}
+                    disabled={!branch || loading}
+                  >
+                    {loading ? "Processing…" : "✓ Confirm Branch"}
+                  </button>
+                </div>
+              )}
+
+              {/* Normal scan button */}
+              {!isBranch && (
                 <button
-                  key={b.id}
-                  onClick={() => setBranch(b.id)}
                   style={{
-                    ...styles.branchBtn,
-                    border: branch === b.id ? "2px solid #378ADD" : "1px solid #1E2D42",
-                    background: branch === b.id ? "rgba(55,138,221,.08)" : "#111827",
+                    ...styles.btnPrimary, width: "100%",
+                    marginTop: 12, padding: 14, fontSize: 15,
+                    opacity: loading ? 0.5 : 1,
                   }}
+                  onClick={() => doScan()}
+                  disabled={loading}
                 >
-                  <span style={{ fontSize: 22 }}>{b.icon}</span>
-                  <span style={{ fontWeight: 700, color: "#E8EFF8" }}>{b.label}</span>
+                  {loading ? "Processing…" : "✓ Confirm Scan"}
                 </button>
-              ))}
-              <button
-                style={{ ...styles.btnPrimary, width: "100%", marginTop: 10, padding: 14, fontSize: 15 }}
-                onClick={() => doScan(null, branch)}
-                disabled={!branch || loading}
-              >
-                {loading ? "Processing…" : "✓ Confirm Branch"}
-              </button>
-            </div>
+              )}
+            </>
           )}
+
+          {/* Back / scan another */}
+          <button
+            style={{ ...styles.btn, width: "100%", marginTop: 10 }}
+            onClick={reset}
+          >
+            ← Scan Another Tray
+          </button>
         </div>
       )}
     </div>
   );
 }
 
-/* ── Styles ─────────────────────────────────────────────────────────────── */
-
-const styles = {
-  container: { maxWidth: 480, margin: "0 auto", padding: 20, fontFamily: "'Segoe UI', sans-serif" },
-  card: { background: "#162032", border: "1px solid #1E2D42", borderRadius: 12, padding: 20, marginBottom: 16 },
-  input: {
-    width: "100%", padding: 12, marginBottom: 12, borderRadius: 8,
-    border: "1px solid #1E2D42", background: "#111827",
-    color: "#E8EFF8", fontSize: 14, boxSizing: "border-box", outline: "none",
-  },
-  buttons:    { display: "flex", gap: 8, flexWrap: "wrap" },
-  btn:        { flex: 1, padding: 10, borderRadius: 8, border: "1px solid #1E2D42", background: "#111827", color: "#E8EFF8", cursor: "pointer", fontSize: 13 },
-  btnPrimary: { flex: 1, padding: 10, borderRadius: 8, border: "none", background: "#185FA5", color: "#E6F1FB", cursor: "pointer", fontSize: 13, fontWeight: 700 },
-  btnGreen:   { flex: 1, padding: 10, borderRadius: 8, border: "none", background: "#3B6D11", color: "#EAF3DE", cursor: "pointer", fontSize: 13 },
-  errorBox:   { background: "rgba(163,45,45,.2)", border: "1px solid rgba(163,45,45,.5)", borderRadius: 8, padding: 14, color: "#F09595", fontSize: 13, marginBottom: 12 },
-  warnBox:    { background: "rgba(186,117,23,.15)", border: "1px solid rgba(186,117,23,.4)", borderRadius: 8, padding: 12, color: "#FAC775", fontSize: 13, marginBottom: 10 },
-  okBox:      { background: "rgba(59,109,17,.2)", border: "1px solid rgba(59,109,17,.4)", borderRadius: 8, padding: 12, color: "#97C459", fontSize: 13 },
-  tagAmber:   { background: "rgba(186,117,23,.2)", color: "#FAC775", borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 700 },
-  tagBlue:    { background: "rgba(55,138,221,.15)", color: "#85B7EB", borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 600 },
-  branchBtn:  { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: 16, borderRadius: 10, cursor: "pointer", marginBottom: 8, textAlign: "left" },
-};
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
 
 function getStageStyle(stage) {
   const colors = {
@@ -208,3 +347,68 @@ function getStageStyle(stage) {
   };
   return { color: colors[stage] || "#E8EFF8" };
 }
+
+/* ── Styles ─────────────────────────────────────────────────────────────── */
+const styles = {
+  container: {
+    maxWidth: 480, margin: "0 auto", padding: 20,
+    fontFamily: "'Segoe UI', sans-serif",
+  },
+  card: {
+    background: "#162032", border: "1px solid #1E2D42",
+    borderRadius: 12, padding: 20, marginBottom: 16,
+  },
+  input: {
+    width: "100%", padding: 12, marginBottom: 12, borderRadius: 8,
+    border: "1px solid #1E2D42", background: "#111827",
+    color: "#E8EFF8", fontSize: 14, boxSizing: "border-box", outline: "none",
+  },
+  buttons: { display: "flex", gap: 8, flexWrap: "wrap" },
+  btn: {
+    flex: 1, padding: 10, borderRadius: 8,
+    border: "1px solid #1E2D42", background: "#111827",
+    color: "#E8EFF8", cursor: "pointer", fontSize: 13,
+  },
+  btnPrimary: {
+    flex: 1, padding: 10, borderRadius: 8, border: "none",
+    background: "#185FA5", color: "#E6F1FB",
+    cursor: "pointer", fontSize: 13, fontWeight: 700,
+  },
+  btnGreen: {
+    flex: 1, padding: 10, borderRadius: 8, border: "none",
+    background: "#3B6D11", color: "#EAF3DE", cursor: "pointer", fontSize: 13,
+  },
+  errorBox: {
+    background: "rgba(163,45,45,.2)", border: "1px solid rgba(163,45,45,.5)",
+    borderRadius: 8, padding: 14, color: "#F09595",
+    fontSize: 13, marginBottom: 12,
+  },
+  okBox: {
+    background: "rgba(59,109,17,.2)", border: "1px solid rgba(59,109,17,.4)",
+    borderRadius: 8, padding: 12, color: "#97C459",
+    fontSize: 13, marginBottom: 12,
+  },
+  warnBox: {
+    background: "rgba(186,117,23,.15)", border: "1px solid rgba(186,117,23,.4)",
+    borderRadius: 8, padding: 12, color: "#FAC775",
+    fontSize: 13, marginBottom: 10,
+  },
+  tagAmber: {
+    background: "rgba(186,117,23,.2)", color: "#FAC775",
+    borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 700,
+  },
+  tagBlue: {
+    background: "rgba(55,138,221,.15)", color: "#85B7EB",
+    borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 600,
+  },
+  branchBtn: {
+    display: "flex", alignItems: "center", gap: 12,
+    width: "100%", padding: 16, borderRadius: 10,
+    cursor: "pointer", marginBottom: 8, textAlign: "left",
+  },
+  spinner: {
+    display: "inline-block", width: 14, height: 14,
+    border: "2px solid #1E2D42", borderTopColor: "#378ADD",
+    borderRadius: "50%", animation: "spin .6s linear infinite",
+  },
+};
