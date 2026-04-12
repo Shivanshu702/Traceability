@@ -10,7 +10,10 @@ def generate_qr_base64(tray_id: str) -> str:
     Returns a base64-encoded PNG string ready for <img src="data:image/png;base64,...">
     """
     # The QR code points to the scan page with tray ID pre-filled
-    base_url = os.getenv("FRONTEND_URL", "https://traceability-git-main-shivanshu702s-projects.vercel.app").rstrip("/")
+    base_url = os.getenv(
+        "FRONTEND_URL", 
+        "https://traceability-git-main-shivanshu702s-projects.vercel.app"
+        ).strip("/")
     url = f"{base_url}?scan={tray_id}"
 
     qr = qrcode.QRCode(
@@ -33,7 +36,10 @@ def generate_qr_base64(tray_id: str) -> str:
 
 def generate_qr_bytes(tray_id: str) -> bytes:
     """Returns raw PNG bytes — used for direct file download."""
-    base_url = os.getenv("FRONTEND_URL", "https://traceability-git-main-shivanshu702s-projects.vercel.app").rstrip("/")
+    base_url = os.getenv(
+        "FRONTEND_URL", 
+        "https://traceability-git-main-shivanshu702s-projects.vercel.app"
+        ).strip("/")
     url = f"{base_url}?scan={tray_id}"
 
     qr = qrcode.QRCode(

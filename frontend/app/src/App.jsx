@@ -18,8 +18,9 @@ export default function App() {
     const role     = localStorage.getItem("role");
 
     // Always capture ?scan= from URL first, regardless of login state
-    const params = new URLSearchParams(window.location.search);
-    const scanId = params.get("scan");
+    const fullUrl = window.location.href;
+    const scanMatch = fullUrl.match(/[?&]scan=([^&]+)/);
+    const scanId = scanMatch ? (scanMatch[1]) : null;
 
     if (scanId) {
       // Save it to localStorage so it survives the login redirect
