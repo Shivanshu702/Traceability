@@ -17,16 +17,14 @@ export default function ScanPage() {
     { id: "BAT_SOL_M", label: "Battery Soldered by Hand",  icon: "✋" },
   ];
 
-  // ── Auto-load tray from ?scan= URL parameter ─────────────────────────────
+  // ── Auto-load tray from localStorage (set by QR scan) ────────────────────
   useEffect(() => {
-    const params  = new URLSearchParams(window.location.search);
-    const scanId  = params.get("scan");
-    if (scanId) {
-      setTrayId(scanId.toUpperCase());
-      // Clean the URL so refreshing doesn't re-trigger
-      window.history.replaceState({}, "", window.location.pathname);
-      // Auto-load the tray info
-      autoLoad(scanId.toUpperCase());
+    const pending = localStorage.getItem("pendingScan");
+    if (pending) {
+      localStorage.removeItem("pendingScan"); // clear it immediately
+      const id = pending.trim().toUpperCase();
+      setTrayId(id);
+      autoLoad(id);
     }
   }, []);
 
@@ -95,7 +93,6 @@ export default function ScanPage() {
         return;
       }
 
-      // Success
       const updatedTray = data.tray || data;
       setTray(updatedTray);
       setBranch(null);
@@ -118,11 +115,7 @@ export default function ScanPage() {
   }
 
   async function handleQRScan(result) {
-    const id = result.trim().toUpperCase();
-
-    // QR might encode the full URL — extract just the ID
-    const extracted = extractTrayId(id);
-
+    const extracted = extractTrayId(result.trim());
     setTrayId(extracted);
     setShowScanner(false);
     await autoLoad(extracted);
@@ -131,8 +124,8 @@ export default function ScanPage() {
   // Handles both plain IDs and full URLs like https://...?scan=TRY-001
   function extractTrayId(raw) {
     try {
-      const url    = new URL(raw);
-      const param  = url.searchParams.get("scan");
+      const url   = new URL(raw);
+      const param = url.searchParams.get("scan");
       if (param) return param.toUpperCase();
     } catch {}
     return raw.toUpperCase();
@@ -154,7 +147,7 @@ export default function ScanPage() {
     <div style={styles.container}>
       <h2 style={{ color: "#E8EFF8", marginBottom: 20 }}>📦 Scan Tray</h2>
 
-      {/* ── Input card ── */}
+      {/* ── Input card (only shown when no tray loaded) ── */}
       {!tray && (
         <div style={styles.card}>
           <input
@@ -171,14 +164,12 @@ export default function ScanPage() {
             onChange={(e) => setOperator(e.target.value)}
           />
           <div style={styles.buttons}>
-            <button style={styles.btn} onClick={loadTray} disabled={loading || !trayId.trim()}>
+            <button style={styles.btn} onClick={loadTray}
+              disabled={loading || !trayId.trim()}>
               {loading ? "…" : "Load"}
             </button>
-            <button
-              style={styles.btnPrimary}
-              onClick={() => doScan()}
-              disabled={loading || !trayId.trim() || isBranch}
-            >
+            <button style={styles.btnPrimary} onClick={() => doScan()}
+              disabled={loading || !trayId.trim()}>
               {loading ? "…" : "Scan"}
             </button>
             <button style={styles.btnGreen} onClick={() => setShowScanner(true)}>
@@ -199,10 +190,10 @@ export default function ScanPage() {
         </div>
       )}
 
-      {/* ── Loading indicator ── */}
+      {/* ── Loading ── */}
       {loading && (
-        <div style={{ textAlign: "center", color: "#6B7E95", padding: 20 }}>
-          <span style={styles.spinner} /> Loading…
+        <div style={{ textAlign: "center", color: "#6B7E95", padding: 20, fontSize: 14 }}>
+          ⏳ Loading tray…
         </div>
       )}
 
@@ -217,10 +208,10 @@ export default function ScanPage() {
         <div style={styles.card}>
 
           {/* Tray header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10,
-                        marginBottom: 14, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "monospace", fontSize: 20,
-                           fontWeight: 700, color: "#E8EFF8" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10,
+                        marginBottom:14, flexWrap:"wrap" }}>
+            <span style={{ fontFamily:"monospace", fontSize:20,
+                           fontWeight:700, color:"#E8EFF8" }}>
               {tray.id}
             </span>
             {tray.parent_id && (
@@ -232,37 +223,40 @@ export default function ScanPage() {
           </div>
 
           {/* Stage */}
-          <p style={{ marginBottom: 10, color: "#6B7E95", fontSize: 13 }}>
+          <p style={{ marginBottom:10, color:"#6B7E95", fontSize:13 }}>
             Stage:{" "}
-            <span style={{ ...getStageStyle(tray.stage), fontWeight: 700 }}>
+            <span style={{ ...getStageStyle(tray.stage), fontWeight:700 }}>
               {tray.stage}
             </span>
           </p>
 
-          {/* FIFO warning */}
+          {/* Info pills */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
+            {tray.shift    && <span style={styles.tagGray}>{tray.shift}</span>}
+            {tray.batch_no && <span style={styles.tagGray}>Batch: {tray.batch_no}</span>}
+            <span style={styles.tagGray}>{tray.total_units} units</span>
+          </div>
+
           {tray.fifo_violated && (
             <div style={styles.warnBox}>⚠ FIFO violation was flagged on this tray</div>
           )}
 
-          {/* Split parent */}
           {isSplitParent && (
             <div style={styles.warnBox}>
-              ✂ This tray was split into{" "}
-              <strong>{tray.id}-A</strong> and <strong>{tray.id}-B</strong>.
-              Scan each child separately.
+              ✂ Tray was split into <strong>{tray.id}-A</strong> and{" "}
+              <strong>{tray.id}-B</strong>. Scan each child separately.
             </div>
           )}
 
-          {/* Complete */}
           {isDone && (
             <div style={styles.okBox}>✅ This tray is complete!</div>
           )}
 
-          {/* Operator input (shown when tray is loaded) */}
+          {/* Actions */}
           {!isDone && !isSplitParent && (
             <>
               <input
-                style={{ ...styles.input, marginTop: 12 }}
+                style={{ ...styles.input, marginTop:12 }}
                 placeholder="Your name (operator)"
                 value={operator}
                 onChange={(e) => setOperator(e.target.value)}
@@ -270,64 +264,53 @@ export default function ScanPage() {
 
               {/* Branch selection */}
               {isBranch && (
-                <div style={{ marginTop: 10 }}>
-                  <p style={{ color: "#FAC775", fontSize: 13, marginBottom: 10 }}>
+                <div style={{ marginTop:10 }}>
+                  <p style={{ color:"#FAC775", fontSize:13, marginBottom:10 }}>
                     ⚡ Select soldering method:
                   </p>
                   {BRANCH_OPTIONS.map((b) => (
-                    <button
-                      key={b.id}
-                      onClick={() => setBranch(b.id)}
+                    <button key={b.id} onClick={() => setBranch(b.id)}
                       style={{
                         ...styles.branchBtn,
                         border: branch === b.id
                           ? "2px solid #378ADD" : "1px solid #1E2D42",
                         background: branch === b.id
                           ? "rgba(55,138,221,.08)" : "#111827",
-                      }}
-                    >
-                      <span style={{ fontSize: 22 }}>{b.icon}</span>
-                      <span style={{ fontWeight: 700, color: "#E8EFF8" }}>
-                        {b.label}
-                      </span>
+                      }}>
+                      <span style={{ fontSize:22 }}>{b.icon}</span>
+                      <span style={{ fontWeight:700, color:"#E8EFF8" }}>{b.label}</span>
                     </button>
                   ))}
                   <button
                     style={{
-                      ...styles.btnPrimary, width: "100%",
-                      marginTop: 10, padding: 14, fontSize: 15,
+                      ...styles.btnPrimary, width:"100%",
+                      marginTop:10, padding:14, fontSize:15,
                       opacity: (!branch || loading) ? 0.5 : 1,
                     }}
                     onClick={() => doScan(null, branch)}
-                    disabled={!branch || loading}
-                  >
+                    disabled={!branch || loading}>
                     {loading ? "Processing…" : "✓ Confirm Branch"}
                   </button>
                 </div>
               )}
 
-              {/* Normal scan button */}
+              {/* Normal scan */}
               {!isBranch && (
                 <button
                   style={{
-                    ...styles.btnPrimary, width: "100%",
-                    marginTop: 12, padding: 14, fontSize: 15,
+                    ...styles.btnPrimary, width:"100%",
+                    marginTop:12, padding:14, fontSize:15,
                     opacity: loading ? 0.5 : 1,
                   }}
                   onClick={() => doScan()}
-                  disabled={loading}
-                >
+                  disabled={loading}>
                   {loading ? "Processing…" : "✓ Confirm Scan"}
                 </button>
               )}
             </>
           )}
 
-          {/* Back / scan another */}
-          <button
-            style={{ ...styles.btn, width: "100%", marginTop: 10 }}
-            onClick={reset}
-          >
+          <button style={{ ...styles.btn, width:"100%", marginTop:10 }} onClick={reset}>
             ← Scan Another Tray
           </button>
         </div>
@@ -335,8 +318,6 @@ export default function ScanPage() {
     </div>
   );
 }
-
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
 
 function getStageStyle(stage) {
   const colors = {
@@ -348,67 +329,35 @@ function getStageStyle(stage) {
   return { color: colors[stage] || "#E8EFF8" };
 }
 
-/* ── Styles ─────────────────────────────────────────────────────────────── */
 const styles = {
-  container: {
-    maxWidth: 480, margin: "0 auto", padding: 20,
-    fontFamily: "'Segoe UI', sans-serif",
-  },
-  card: {
-    background: "#162032", border: "1px solid #1E2D42",
-    borderRadius: 12, padding: 20, marginBottom: 16,
-  },
-  input: {
-    width: "100%", padding: 12, marginBottom: 12, borderRadius: 8,
-    border: "1px solid #1E2D42", background: "#111827",
-    color: "#E8EFF8", fontSize: 14, boxSizing: "border-box", outline: "none",
-  },
-  buttons: { display: "flex", gap: 8, flexWrap: "wrap" },
-  btn: {
-    flex: 1, padding: 10, borderRadius: 8,
-    border: "1px solid #1E2D42", background: "#111827",
-    color: "#E8EFF8", cursor: "pointer", fontSize: 13,
-  },
-  btnPrimary: {
-    flex: 1, padding: 10, borderRadius: 8, border: "none",
-    background: "#185FA5", color: "#E6F1FB",
-    cursor: "pointer", fontSize: 13, fontWeight: 700,
-  },
-  btnGreen: {
-    flex: 1, padding: 10, borderRadius: 8, border: "none",
-    background: "#3B6D11", color: "#EAF3DE", cursor: "pointer", fontSize: 13,
-  },
-  errorBox: {
-    background: "rgba(163,45,45,.2)", border: "1px solid rgba(163,45,45,.5)",
-    borderRadius: 8, padding: 14, color: "#F09595",
-    fontSize: 13, marginBottom: 12,
-  },
-  okBox: {
-    background: "rgba(59,109,17,.2)", border: "1px solid rgba(59,109,17,.4)",
-    borderRadius: 8, padding: 12, color: "#97C459",
-    fontSize: 13, marginBottom: 12,
-  },
-  warnBox: {
-    background: "rgba(186,117,23,.15)", border: "1px solid rgba(186,117,23,.4)",
-    borderRadius: 8, padding: 12, color: "#FAC775",
-    fontSize: 13, marginBottom: 10,
-  },
-  tagAmber: {
-    background: "rgba(186,117,23,.2)", color: "#FAC775",
-    borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 700,
-  },
-  tagBlue: {
-    background: "rgba(55,138,221,.15)", color: "#85B7EB",
-    borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 600,
-  },
-  branchBtn: {
-    display: "flex", alignItems: "center", gap: 12,
-    width: "100%", padding: 16, borderRadius: 10,
-    cursor: "pointer", marginBottom: 8, textAlign: "left",
-  },
-  spinner: {
-    display: "inline-block", width: 14, height: 14,
-    border: "2px solid #1E2D42", borderTopColor: "#378ADD",
-    borderRadius: "50%", animation: "spin .6s linear infinite",
-  },
+  container: { maxWidth:480, margin:"0 auto", padding:20,
+               fontFamily:"'Segoe UI', sans-serif" },
+  card: { background:"#162032", border:"1px solid #1E2D42",
+          borderRadius:12, padding:20, marginBottom:16 },
+  input: { width:"100%", padding:12, marginBottom:12, borderRadius:8,
+           border:"1px solid #1E2D42", background:"#111827",
+           color:"#E8EFF8", fontSize:14, boxSizing:"border-box", outline:"none" },
+  buttons: { display:"flex", gap:8, flexWrap:"wrap" },
+  btn: { flex:1, padding:10, borderRadius:8, border:"1px solid #1E2D42",
+         background:"#111827", color:"#E8EFF8", cursor:"pointer", fontSize:13 },
+  btnPrimary: { flex:1, padding:10, borderRadius:8, border:"none",
+                background:"#185FA5", color:"#E6F1FB",
+                cursor:"pointer", fontSize:13, fontWeight:700 },
+  btnGreen: { flex:1, padding:10, borderRadius:8, border:"none",
+              background:"#3B6D11", color:"#EAF3DE", cursor:"pointer", fontSize:13 },
+  errorBox: { background:"rgba(163,45,45,.2)", border:"1px solid rgba(163,45,45,.5)",
+              borderRadius:8, padding:14, color:"#F09595", fontSize:13, marginBottom:12 },
+  okBox:    { background:"rgba(59,109,17,.2)", border:"1px solid rgba(59,109,17,.4)",
+              borderRadius:8, padding:12, color:"#97C459", fontSize:13, marginBottom:12 },
+  warnBox:  { background:"rgba(186,117,23,.15)", border:"1px solid rgba(186,117,23,.4)",
+              borderRadius:8, padding:12, color:"#FAC775", fontSize:13, marginBottom:10 },
+  tagAmber: { background:"rgba(186,117,23,.2)", color:"#FAC775",
+              borderRadius:5, padding:"3px 10px", fontSize:12, fontWeight:700 },
+  tagBlue:  { background:"rgba(55,138,221,.15)", color:"#85B7EB",
+              borderRadius:5, padding:"3px 10px", fontSize:12, fontWeight:600 },
+  tagGray:  { background:"rgba(136,135,128,.15)", color:"#6B7E95",
+              borderRadius:5, padding:"3px 10px", fontSize:11 },
+  branchBtn: { display:"flex", alignItems:"center", gap:12,
+               width:"100%", padding:16, borderRadius:10,
+               cursor:"pointer", marginBottom:8, textAlign:"left" },
 };

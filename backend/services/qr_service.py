@@ -1,4 +1,4 @@
-import qrcode
+import qrcode # type: ignore
 import base64
 import io
 import os

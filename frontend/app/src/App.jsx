@@ -17,21 +17,27 @@ export default function App() {
     const username = localStorage.getItem("username");
     const role     = localStorage.getItem("role");
 
+    // Always capture ?scan= from URL first, regardless of login state
+    const params = new URLSearchParams(window.location.search);
+    const scanId = params.get("scan");
+
+    if (scanId) {
+      // Save it to localStorage so it survives the login redirect
+      localStorage.setItem("pendingScan", scanId);
+      // Clean the URL immediately
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
     if (token && username) {
       setUser({ username, role: role || "operator" });
 
-      // If QR code was scanned, go straight to scan page
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("scan")) {
+      // Already logged in — if there's a pending scan, go to scan page
+      const pending = localStorage.getItem("pendingScan");
+      if (pending) {
         setPage("scan");
       }
-    } else {
-      // Not logged in — but store scan param so we redirect after login
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("scan")) {
-        sessionStorage.setItem("pendingScan", params.get("scan"));
-      }
     }
+    // If not logged in, pendingScan stays in localStorage until after login
   }, []);
 
   function handleLogin(userData) {
@@ -40,11 +46,9 @@ export default function App() {
     setUser(userData);
 
     // After login, check if there's a pending QR scan
-    const pending = sessionStorage.getItem("pendingScan");
+    const pending = localStorage.getItem("pendingScan");
     if (pending) {
-      sessionStorage.removeItem("pendingScan");
-      // Push the scan param back into URL so ScanPage can read it
-      window.history.replaceState({}, "", `?scan=${pending}`);
+      // Don't remove yet — ScanPage will read it and remove it
       setPage("scan");
     } else {
       setPage("dashboard");
@@ -55,7 +59,7 @@ export default function App() {
     localStorage.removeItem("token");
     localStorage.removeItem("username");
     localStorage.removeItem("role");
-    // Clean URL
+    localStorage.removeItem("pendingScan");
     window.history.replaceState({}, "", window.location.pathname);
     setUser(null);
   }
