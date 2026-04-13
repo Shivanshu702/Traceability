@@ -6,8 +6,9 @@ Sends HTML emails for three event types mirroring the GAS implementation:
   2. Stuck tray alert (hourly, via scheduler)
   3. Daily production summary (daily, via scheduler)
 
-SMTP credentials are loaded from the EmailSettings DB row for the tenant,
-falling back to environment variables for zero-config deployments.
+Priority:
+  1. Resend API (set RESEND_API_KEY env var) — works on all hosts, no port issues
+  2. SMTP fallback (set SMTP_HOST etc.) — may be blocked on free hosting tiers
 """
 import smtplib
 import os
@@ -37,10 +38,10 @@ def get_email_settings(db: Session, tenant_id: str = "default") -> EmailSettings
     return EmailSettings(
         tenant_id              = tenant_id,
         smtp_host              = os.getenv("SMTP_HOST", ""),
-        smtp_port              = int(os.getenv("SMTP_PORT", "587")),
+        smtp_port              = int(os.getenv("SMTP_PORT", "465")),
         smtp_user              = os.getenv("SMTP_USER", ""),
         smtp_password          = os.getenv("SMTP_PASSWORD", ""),
-        smtp_use_tls           = os.getenv("SMTP_USE_TLS", "true").lower() != "false",
+        smtp_use_tls           = os.getenv("SMTP_USE_TLS", "false").lower() != "false",
         from_email             = os.getenv("FROM_EMAIL", ""),
         alert_recipients       = os.getenv("ALERT_EMAILS", ""),
         stuck_alert_enabled    = os.getenv("STUCK_ALERT_ENABLED", "").lower() == "true",
@@ -51,49 +52,137 @@ def get_email_settings(db: Session, tenant_id: str = "default") -> EmailSettings
     )
 
 
-# ── Core send function ────────────────────────────────────────────────────────
+# ── Resend sender (primary — works on all hosting providers) ──────────────────
 
-def send_email(settings: EmailSettings, to: List[str], subject: str, html_body: str) -> bool:
-    """Send an HTML email via SMTP. Returns True on success."""
-    if not settings.smtp_host or not to:
-        logger.debug("Email skipped — no SMTP host or recipients configured")
+def _send_via_resend(
+    to:        List[str],
+    subject:   str,
+    html_body: str,
+    from_email: str = "",
+) -> bool:
+    """
+    Send email via Resend HTTP API.
+    Requires RESEND_API_KEY environment variable.
+    Sign up free at https://resend.com — 3,000 emails/month on free tier.
+    """
+    api_key = os.getenv("RESEND_API_KEY", "")
+    if not api_key:
         return False
 
     try:
-        msg             = MIMEMultipart("alternative")
-        msg["Subject"]  = subject
-        msg["From"]     = settings.from_email or settings.smtp_user
-        msg["To"]       = ", ".join(to)
+        import resend  # pip install resend
+        resend.api_key = api_key
+
+        sender = from_email or os.getenv("FROM_EMAIL", "")
+        # If no custom domain verified yet, use Resend's test sender
+        if not sender or "@" not in sender:
+            sender = "Traceability System <onboarding@resend.dev>"
+
+        params = {
+            "from":    sender,
+            "to":      to,
+            "subject": subject,
+            "html":    html_body,
+        }
+        resend.Emails.send(params)
+        logger.info(f"[Resend] Email sent: {subject} → {to}")
+        return True
+
+    except ImportError:
+        logger.warning("Resend package not installed. Run: pip install resend")
+        return False
+    except Exception as exc:
+        logger.error(f"[Resend] Send error: {exc}")
+        return False
+
+
+# ── SMTP sender (fallback) ────────────────────────────────────────────────────
+
+def _send_via_smtp(
+    settings:  EmailSettings,
+    to:        List[str],
+    subject:   str,
+    html_body: str,
+) -> bool:
+    """
+    Send email via SMTP.
+    Uses port 465 (SSL) by default — works better than 587 on most cloud hosts.
+    """
+    if not settings.smtp_host or not to:
+        logger.debug("SMTP skipped — no host or recipients configured")
+        return False
+
+    try:
+        msg            = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = settings.from_email or settings.smtp_user
+        msg["To"]      = ", ".join(to)
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        port = settings.smtp_port or 587
+        port = settings.smtp_port or 465
 
         if port == 465:
-            # Port 465 — direct SSL connection (works on Render free tier)
+            # Direct SSL — works on Render, Railway, Fly.io free tiers
             import ssl
             context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(settings.smtp_host, port,
-                                  context=context, timeout=15) as server:
+            with smtplib.SMTP_SSL(
+                settings.smtp_host, port, context=context, timeout=15
+            ) as server:
                 if settings.smtp_user and settings.smtp_password:
-                    server.login(settings.smtp_user, settings.smtp_password)
+                    server.login(
+                        settings.smtp_user,
+                        settings.smtp_password.replace(" ", ""),  # strip spaces from App Password
+                    )
                 server.sendmail(msg["From"], to, msg.as_string())
         else:
-            # Port 587 — STARTTLS (blocked on Render free tier)
+            # STARTTLS (port 587) — may be blocked on free hosting
             with smtplib.SMTP(settings.smtp_host, port, timeout=15) as server:
                 server.ehlo()
                 if settings.smtp_use_tls:
                     server.starttls()
                     server.ehlo()
                 if settings.smtp_user and settings.smtp_password:
-                    server.login(settings.smtp_user, settings.smtp_password)
+                    server.login(
+                        settings.smtp_user,
+                        settings.smtp_password.replace(" ", ""),  # strip spaces from App Password
+                    )
                 server.sendmail(msg["From"], to, msg.as_string())
 
-        logger.info(f"Email sent: {subject} → {to}")
+        logger.info(f"[SMTP] Email sent: {subject} → {to}")
         return True
 
     except Exception as exc:
-        logger.error(f"Email send error: {exc}")
+        logger.error(f"[SMTP] Send error: {exc}")
         return False
+
+
+# ── Unified send function ─────────────────────────────────────────────────────
+
+def send_email(
+    settings:  EmailSettings,
+    to:        List[str],
+    subject:   str,
+    html_body: str,
+) -> bool:
+    """
+    Try Resend first (if RESEND_API_KEY is set), fall back to SMTP.
+    This means you can use Resend for production and SMTP for local dev.
+    """
+    if not to:
+        return False
+
+    # 1. Try Resend
+    if os.getenv("RESEND_API_KEY"):
+        result = _send_via_resend(
+            to, subject, html_body,
+            from_email=settings.from_email or "",
+        )
+        if result:
+            return True
+        logger.warning("Resend failed — falling back to SMTP")
+
+    # 2. Fall back to SMTP
+    return _send_via_smtp(settings, to, subject, html_body)
 
 
 # ── Email template wrapper ────────────────────────────────────────────────────
@@ -134,12 +223,12 @@ code{{background:#F3F4F6;padding:2px 6px;border-radius:4px;font-size:12px;font-f
 # ── Alert senders ─────────────────────────────────────────────────────────────
 
 def send_fifo_alert(
-    db: Session,
-    tray_id: str,
-    stage: str,
-    operator: str,
+    db:             Session,
+    tray_id:        str,
+    stage:          str,
+    operator:       str,
     older_tray_ids: list,
-    tenant_id: str = "default",
+    tenant_id:      str = "default",
 ):
     """Send an immediate email when a FIFO violation is detected on scan."""
     settings = get_email_settings(db, tenant_id)
@@ -180,10 +269,10 @@ def send_fifo_alert(
 
 
 def send_stuck_alert(
-    db: Session,
+    db:          Session,
     stuck_trays: list,
     stuck_hours: int = 1,
-    tenant_id: str = "default",
+    tenant_id:   str = "default",
 ):
     """Send a stuck-tray alert email (called from the hourly scheduler job)."""
     settings = get_email_settings(db, tenant_id)
@@ -204,7 +293,7 @@ def send_stuck_alert(
         for t in stuck_trays
     )
     count = len(stuck_trays)
-    body = f"""
+    body  = f"""
     <p>
       <strong>{count}</strong> tray{'s' if count != 1 else ''} ha{'ve' if count != 1 else 's'}
       not moved for more than <strong>{stuck_hours} hour{'s' if stuck_hours != 1 else ''}</strong>.
@@ -223,8 +312,8 @@ def send_stuck_alert(
 
 
 def send_daily_summary(
-    db: Session,
-    stats: dict,
+    db:        Session,
+    stats:     dict,
     tenant_id: str = "default",
 ):
     """Send the daily production summary email (called from the daily scheduler job)."""
@@ -239,15 +328,16 @@ def send_daily_summary(
     date_str = _date.today().strftime("%A, %d %B %Y")
 
     stage_rows = "".join(
-        f"<tr><td>{stage}</td><td style='text-align:right;font-weight:700'>{count}</td></tr>"
+        f"<tr><td>{stage}</td>"
+        f"<td style='text-align:right;font-weight:700'>{count}</td></tr>"
         for stage, count in (stats.get("stage_counts") or {}).items()
         if count > 0
     )
 
     completed_today = stats.get("completed_today", 0)
-    total_active    = stats.get("total_active", 0)
-    fifo_violated   = stats.get("fifo_violated", 0)
-    stuck_count     = stats.get("stuck_count", 0)
+    total_active    = stats.get("total_active",    0)
+    fifo_violated   = stats.get("fifo_violated",   0)
+    stuck_count     = stats.get("stuck_count",     0)
 
     body = f"""
     <div class="kpi-grid">
@@ -268,13 +358,22 @@ def send_daily_summary(
         <div class="kpi-lbl">Stuck trays</div>
       </div>
     </div>
-    {f'<h3 style="margin:0 0 10px;font-size:14px">Active trays by stage</h3><table><tr><th>Stage</th><th style="text-align:right">Count</th></tr>{stage_rows}</table>' if stage_rows else ''}
+    {
+      '<h3 style="margin:0 0 10px;font-size:14px">Active trays by stage</h3>'
+      '<table><tr><th>Stage</th><th style="text-align:right">Count</th></tr>'
+      + stage_rows + '</table>'
+      if stage_rows else ''
+    }
     """
 
     send_email(
         settings, recipients,
         f"📊 Daily Summary — {date_str}",
-        _wrap(f"📊 Daily Production Summary<br><span style='font-size:13px;font-weight:400;color:#CBD5E0'>{date_str}</span>", body),
+        _wrap(
+            f"📊 Daily Production Summary"
+            f"<br><span style='font-size:13px;font-weight:400;color:#CBD5E0'>{date_str}</span>",
+            body,
+        ),
     )
 
 

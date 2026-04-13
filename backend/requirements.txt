@@ -8,3 +8,4 @@ qrcode[pil]
 psycopg2-binary
 apscheduler
 openpyxl
+resend
