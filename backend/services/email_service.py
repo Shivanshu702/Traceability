@@ -66,14 +66,27 @@ def send_email(settings: EmailSettings, to: List[str], subject: str, html_body: 
         msg["To"]       = ", ".join(to)
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
-            server.ehlo()
-            if settings.smtp_use_tls:
-                server.starttls()
+        port = settings.smtp_port or 587
+
+        if port == 465:
+            # Port 465 — direct SSL connection (works on Render free tier)
+            import ssl
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(settings.smtp_host, port,
+                                  context=context, timeout=15) as server:
+                if settings.smtp_user and settings.smtp_password:
+                    server.login(settings.smtp_user, settings.smtp_password)
+                server.sendmail(msg["From"], to, msg.as_string())
+        else:
+            # Port 587 — STARTTLS (blocked on Render free tier)
+            with smtplib.SMTP(settings.smtp_host, port, timeout=15) as server:
                 server.ehlo()
-            if settings.smtp_user and settings.smtp_password:
-                server.login(settings.smtp_user, settings.smtp_password)
-            server.sendmail(msg["From"], to, msg.as_string())
+                if settings.smtp_use_tls:
+                    server.starttls()
+                    server.ehlo()
+                if settings.smtp_user and settings.smtp_password:
+                    server.login(settings.smtp_user, settings.smtp_password)
+                server.sendmail(msg["From"], to, msg.as_string())
 
         logger.info(f"Email sent: {subject} → {to}")
         return True
