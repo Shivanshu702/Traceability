@@ -28,20 +28,20 @@ async function req(method, path, body) {
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
-export async function loginUser(username, password) {
+export async function loginUser(username, password, tenant_id = "default") {
   const res = await fetch(`${BASE}/login`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ username, password }),
+    body:    JSON.stringify({ username, password, tenant_id }),
   });
   return res.json();
 }
 
-export async function registerUser(username, password, role = "operator") {
+export async function registerUser(username, password, role = "operator", tenant_id = "default") {
   const res = await fetch(`${BASE}/register`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ username, password, role }),
+    body:    JSON.stringify({ username, password, role, tenant_id }),
   });
   return res.json();
 }
@@ -49,28 +49,29 @@ export async function registerUser(username, password, role = "operator") {
 // ── Pipeline ───────────────────────────────────────────────────────────────────
 export const getPipeline = () => req("GET", "/pipeline");
 
+// ── Pipeline config (admin) ────────────────────────────────────────────────────
+export const getAdminPipelineConfig  = ()       => req("GET",  "/admin/pipeline-config");
+export const saveAdminPipelineConfig = (config) => req("PUT",  "/admin/pipeline-config", config);
+export const resetPipelineConfig     = ()       => req("POST", "/admin/pipeline-config/reset");
+
 // ── Trays ──────────────────────────────────────────────────────────────────────
 export const getAllTrays  = (params = {}) =>
   req("GET", "/trays?" + new URLSearchParams(params));
 
-export const getTray     = (id) => req("GET", `/tray/${id}`);
-
-export const createTrays = (trays) => req("POST", "/trays/create", { trays });
-
-export const deleteTray  = (id) => req("DELETE", `/tray/${id}`);
+export const getTray     = (id)   => req("GET",    `/tray/${id}`);
+export const createTrays = (trays) => req("POST",  "/trays/create", { trays });
+export const deleteTray  = (id)   => req("DELETE", `/tray/${id}`);
 
 // ── Scan ───────────────────────────────────────────────────────────────────────
-export const scanTray    = (id, operator, next_stage_override = undefined) =>
+export const scanTray = (id, operator, next_stage_override = undefined) =>
   req("POST", "/scan", { id, operator, next_stage_override });
 
-export const bulkScan    = (ids, operator, next_stage_override = undefined) =>
+export const bulkScan = (ids, operator, next_stage_override = undefined) =>
   req("POST", "/scan/bulk", { ids, operator, next_stage_override });
 
 // ── History & logs ─────────────────────────────────────────────────────────────
-export const getHistory  = (trayId) => req("GET", `/history/${trayId}`);
-
-export const getScanLog  = (limit = 200) =>
-  req("GET", `/scan-log?limit=${limit}`);
+export const getHistory  = (trayId)     => req("GET", `/history/${trayId}`);
+export const getScanLog  = (limit = 200) => req("GET", `/scan-log?limit=${limit}`);
 
 // ── Stats / alerts / analytics ─────────────────────────────────────────────────
 export const getStats     = () => req("GET", "/stats");
@@ -79,5 +80,53 @@ export const getStageLoad = () => req("GET", "/stage-load");
 export const getAnalytics = () => req("GET", "/analytics");
 
 // ── Audit log (admin) ──────────────────────────────────────────────────────────
-export const getAuditLog  = (limit = 100) =>
-  req("GET", `/audit-log?limit=${limit}`);
+export const getAuditLog = (limit = 100) => req("GET", `/audit-log?limit=${limit}`);
+
+// ── User management (admin) ────────────────────────────────────────────────────
+export const listUsers       = ()                          => req("GET",    "/admin/users");
+export const adminCreateUser = (username, password, role)  => req("POST",   "/admin/users", { username, password, role });
+export const changeUserRole  = (username, role)            => req("PUT",    `/admin/users/${username}/role`, { role });
+export const deleteUser      = (username)                  => req("DELETE", `/admin/users/${username}`);
+
+// ── Email settings (admin) ─────────────────────────────────────────────────────
+export const getEmailSettings    = ()        => req("GET", "/admin/email-settings");
+export const saveEmailSettings   = (settings) => req("PUT", "/admin/email-settings", settings);
+export const sendTestEmail       = ()        => req("POST", "/admin/test-email");
+
+// ── Export (download helpers) ──────────────────────────────────────────────────
+export function downloadExport(path, filename) {
+  const url  = `${BASE}${path}`;
+  const link = document.createElement("a");
+  link.href  = url;
+
+  // Attach token as query param for download links (headers not supported on <a>)
+  link.href  = url + (url.includes("?") ? "&" : "?") + "token=" + getToken();
+  link.download = filename;
+  link.click();
+}
+
+export function downloadTraysCSV(filters = {}) {
+  const qs = new URLSearchParams(filters).toString();
+  triggerDownload(`/export/trays${qs ? "?" + qs : ""}`, "trays.csv");
+}
+
+export function downloadScanLogCSV() {
+  triggerDownload("/export/scan-log", "scan_log.csv");
+}
+
+export function downloadReportXLSX() {
+  triggerDownload("/export/report", "production_report.xlsx");
+}
+
+// Direct authenticated download (uses fetch + blob to keep the Bearer token)
+async function triggerDownload(path, filename) {
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+  if (!res.ok) { alert("Export failed — check your connection"); return; }
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}

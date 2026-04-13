@@ -3,10 +3,19 @@ from models import ScanEvent
 from datetime import datetime
 
 
-def log_scan(db, tray_id: str, from_stage: str, to_stage: str,
-             operator: str = "SYSTEM", fifo_flag: bool = False, note: str = ""):
+def log_scan(
+    db,
+    tray_id:    str,
+    from_stage: str,
+    to_stage:   str,
+    operator:   str  = "SYSTEM",
+    fifo_flag:  bool = False,
+    note:       str  = "",
+    tenant_id:  str  = "default",
+):
     event = ScanEvent(
         id         = str(uuid.uuid4()),
+        tenant_id  = tenant_id,
         tray_id    = tray_id,
         from_stage = from_stage,
         stage      = to_stage,

@@ -7,6 +7,8 @@ class Tray(Base):
     __tablename__ = "trays"
 
     id              = Column(String, primary_key=True, index=True)
+    tenant_id       = Column(String, default="default", index=True, nullable=False)
+
     stage           = Column(String, default="CREATED", index=True)
     is_done         = Column(Boolean, default=False)
     is_split_parent = Column(Boolean, default=False)
@@ -32,6 +34,7 @@ class ScanEvent(Base):
     __tablename__ = "scan_events"
 
     id          = Column(String, primary_key=True)       # UUID string
+    tenant_id   = Column(String, default="default", index=True, nullable=False)
     tray_id     = Column(String, index=True)
     from_stage  = Column(String, default="")
     stage       = Column(String)                         # to_stage
@@ -44,17 +47,57 @@ class ScanEvent(Base):
 class User(Base):
     __tablename__ = "users"
 
-    id       = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    password = Column(String)
-    role     = Column(String, default="operator")        # "admin" | "operator"
+    id        = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, default="default", index=True, nullable=False)
+    username  = Column(String, index=True)               # unique within tenant
+    password  = Column(String)
+    role      = Column(String, default="operator")       # "admin" | "operator"
 
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id        = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, default="default", index=True, nullable=False)
     username  = Column(String, index=True)
     action    = Column(String)
     details   = Column(String, default="")
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+class PipelineConfig(Base):
+    """One row per tenant — stores the full pipeline as JSON."""
+    __tablename__ = "pipeline_configs"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    tenant_id  = Column(String, unique=True, index=True, nullable=False)
+    config     = Column(Text, nullable=False)            # JSON string
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailSettings(Base):
+    """SMTP + notification preferences, one row per tenant."""
+    __tablename__ = "email_settings"
+
+    id                     = Column(Integer, primary_key=True, index=True)
+    tenant_id              = Column(String, unique=True, index=True, nullable=False)
+
+    # SMTP
+    smtp_host              = Column(String, default="")
+    smtp_port              = Column(Integer, default=587)
+    smtp_user              = Column(String, default="")
+    smtp_password          = Column(String, default="")
+    smtp_use_tls           = Column(Boolean, default=True)
+    from_email             = Column(String, default="")
+
+    # Recipients — comma-separated list
+    alert_recipients       = Column(Text, default="")
+
+    # Feature flags
+    stuck_alert_enabled    = Column(Boolean, default=False)
+    stuck_hours            = Column(Integer, default=1)
+    daily_summary_enabled  = Column(Boolean, default=False)
+    daily_summary_hour     = Column(Integer, default=8)
+    fifo_alert_enabled     = Column(Boolean, default=True)
+
+    updated_at             = Column(DateTime, default=datetime.utcnow)
