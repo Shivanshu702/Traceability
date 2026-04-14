@@ -322,6 +322,51 @@ def delete_tray(
     return {"ok": True}
 
 
+@router.post("/trays/bulk-delete")
+def bulk_delete_trays(
+    payload: dict,
+    user:    dict    = Depends(require_admin),
+    db:      Session = Depends(get_db),
+):
+    """
+    Bulk delete trays by ID list. Admin only.
+    Also deletes associated scan events for each tray.
+    payload: { "ids": ["TRY-001", "TRY-002", ...] }
+    """
+    tid     = tenant(user)
+    ids     = [str(i).strip().upper() for i in payload.get("ids", [])]
+    deleted = []
+    not_found = []
+
+    for tray_id in ids:
+        tray = db.query(Tray).filter(
+            Tray.tenant_id == tid, Tray.id == tray_id
+        ).first()
+        if not tray:
+            not_found.append(tray_id)
+            continue
+        # Also remove all scan events for this tray
+        db.query(ScanEvent).filter(
+            ScanEvent.tenant_id == tid, ScanEvent.tray_id == tray_id
+        ).delete(synchronize_session=False)
+        db.delete(tray)
+        deleted.append(tray_id)
+
+    if deleted:
+        log_action(
+            db, user["sub"], "BULK_DELETE_TRAYS",
+            f"count={len(deleted)} ids={','.join(deleted[:10])}",
+            tid,
+        )
+    db.commit()
+    return {
+        "ok":        True,
+        "deleted":   len(deleted),
+        "not_found": len(not_found),
+        "ids":       deleted,
+    }
+
+
 # ── Scan ──────────────────────────────────────────────────────────────────────
 
 @router.post("/scan")
@@ -461,32 +506,48 @@ def get_scan_log(
 
 @router.get("/stats")
 def get_stats(
-    user: dict    = Depends(get_current_user),
-    db:   Session = Depends(get_db),
+    project: Optional[str] = Query(None),
+    user:    dict          = Depends(get_current_user),
+    db:      Session       = Depends(get_db),
 ):
-    tid       = tenant(user)
-    all_trays = db.query(Tray).filter(
-        Tray.tenant_id == tid, Tray.stage != "SPLIT"
-    ).all()
-    today = date.today()
+    tid = tenant(user)
+    q   = db.query(Tray).filter(Tray.tenant_id == tid, Tray.stage != "SPLIT")
+    if project:
+        q = q.filter(Tray.project == project)
+    all_trays = q.all()
+    today     = date.today()
 
     stage_counts: dict = {}
+    stage_units:  dict = {}
     for t in all_trays:
         if t.stage != "COMPLETE":
             stage_counts[t.stage] = stage_counts.get(t.stage, 0) + 1
+            stage_units[t.stage]  = stage_units.get(t.stage, 0) + (t.total_units or 0)
+
+    total_active_units   = sum(t.total_units or 0 for t in all_trays if t.stage != "COMPLETE")
+    total_complete_units = sum(t.total_units or 0 for t in all_trays if t.stage == "COMPLETE")
 
     return {
-        "total_active":    sum(1 for t in all_trays if t.stage != "COMPLETE"),
-        "total_complete":  sum(1 for t in all_trays if t.stage == "COMPLETE"),
-        "fifo_violated":   sum(1 for t in all_trays if t.fifo_violated),
-        "completed_today": sum(
+        "total_active":         sum(1 for t in all_trays if t.stage != "COMPLETE"),
+        "total_complete":       sum(1 for t in all_trays if t.stage == "COMPLETE"),
+        "total_active_units":   total_active_units,
+        "total_complete_units": total_complete_units,
+        "fifo_violated":        sum(1 for t in all_trays if t.fifo_violated),
+        "completed_today":      sum(
             1 for t in all_trays
+            if t.stage == "COMPLETE"
+            and t.completed_at
+            and t.completed_at.date() == today
+        ),
+        "completed_today_units": sum(
+            t.total_units or 0 for t in all_trays
             if t.stage == "COMPLETE"
             and t.completed_at
             and t.completed_at.date() == today
         ),
         "stuck_count":  len(detect_bottlenecks(db, tid)),
         "stage_counts": stage_counts,
+        "stage_units":  stage_units,
     }
 
 

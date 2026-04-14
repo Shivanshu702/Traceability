@@ -58,9 +58,13 @@ export const resetPipelineConfig     = ()       => req("POST", "/admin/pipeline-
 export const getAllTrays  = (params = {}) =>
   req("GET", "/trays?" + new URLSearchParams(params));
 
-export const getTray     = (id)   => req("GET",    `/tray/${id}`);
-export const createTrays = (trays) => req("POST",  "/trays/create", { trays });
-export const deleteTray  = (id)   => req("DELETE", `/tray/${id}`);
+export const getTray     = (id)    => req("GET",    `/tray/${id}`);
+export const createTrays = (trays) => req("POST",   "/trays/create", { trays });
+export const deleteTray  = (id)    => req("DELETE", `/tray/${id}`);
+
+// Bulk delete — admin only
+export const bulkDeleteTrays = (ids) =>
+  req("POST", "/trays/bulk-delete", { ids });
 
 // ── Scan ───────────────────────────────────────────────────────────────────────
 export const scanTray = (id, operator, next_stage_override = undefined) =>
@@ -70,11 +74,14 @@ export const bulkScan = (ids, operator, next_stage_override = undefined) =>
   req("POST", "/scan/bulk", { ids, operator, next_stage_override });
 
 // ── History & logs ─────────────────────────────────────────────────────────────
-export const getHistory  = (trayId)     => req("GET", `/history/${trayId}`);
+export const getHistory  = (trayId)      => req("GET", `/history/${trayId}`);
 export const getScanLog  = (limit = 200) => req("GET", `/scan-log?limit=${limit}`);
 
-// ── Stats / alerts / analytics ─────────────────────────────────────────────────
-export const getStats     = () => req("GET", "/stats");
+// ── Stats — optional project filter ───────────────────────────────────────────
+export const getStats = (project = null) =>
+  req("GET", project ? `/stats?project=${encodeURIComponent(project)}` : "/stats");
+
+// ── Alerts / analytics ─────────────────────────────────────────────────────────
 export const getAlerts    = () => req("GET", "/alerts");
 export const getStageLoad = () => req("GET", "/stage-load");
 export const getAnalytics = () => req("GET", "/analytics");
@@ -83,28 +90,17 @@ export const getAnalytics = () => req("GET", "/analytics");
 export const getAuditLog = (limit = 100) => req("GET", `/audit-log?limit=${limit}`);
 
 // ── User management (admin) ────────────────────────────────────────────────────
-export const listUsers       = ()                          => req("GET",    "/admin/users");
-export const adminCreateUser = (username, password, role)  => req("POST",   "/admin/users", { username, password, role });
-export const changeUserRole  = (username, role)            => req("PUT",    `/admin/users/${username}/role`, { role });
-export const deleteUser      = (username)                  => req("DELETE", `/admin/users/${username}`);
+export const listUsers       = ()                         => req("GET",    "/admin/users");
+export const adminCreateUser = (username, password, role) => req("POST",   "/admin/users", { username, password, role });
+export const changeUserRole  = (username, role)           => req("PUT",    `/admin/users/${username}/role`, { role });
+export const deleteUser      = (username)                 => req("DELETE", `/admin/users/${username}`);
 
 // ── Email settings (admin) ─────────────────────────────────────────────────────
-export const getEmailSettings    = ()        => req("GET", "/admin/email-settings");
-export const saveEmailSettings   = (settings) => req("PUT", "/admin/email-settings", settings);
-export const sendTestEmail       = ()        => req("POST", "/admin/test-email");
+export const getEmailSettings  = ()         => req("GET",  "/admin/email-settings");
+export const saveEmailSettings = (settings) => req("PUT",  "/admin/email-settings", settings);
+export const sendTestEmail     = ()         => req("POST", "/admin/test-email");
 
-// ── Export (download helpers) ──────────────────────────────────────────────────
-export function downloadExport(path, filename) {
-  const url  = `${BASE}${path}`;
-  const link = document.createElement("a");
-  link.href  = url;
-
-  // Attach token as query param for download links (headers not supported on <a>)
-  link.href  = url + (url.includes("?") ? "&" : "?") + "token=" + getToken();
-  link.download = filename;
-  link.click();
-}
-
+// ── Export (authenticated download helpers) ────────────────────────────────────
 export function downloadTraysCSV(filters = {}) {
   const qs = new URLSearchParams(filters).toString();
   triggerDownload(`/export/trays${qs ? "?" + qs : ""}`, "trays.csv");
@@ -118,7 +114,6 @@ export function downloadReportXLSX() {
   triggerDownload("/export/report", "production_report.xlsx");
 }
 
-// Direct authenticated download (uses fetch + blob to keep the Bearer token)
 async function triggerDownload(path, filename) {
   const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
   if (!res.ok) { alert("Export failed — check your connection"); return; }
