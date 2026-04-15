@@ -7,21 +7,31 @@ const COLORS = {
   RACK3:"#D4537E", DEPANEL_IN:"#BA7517", TESTING:"#185FA5", COMPLETE:"#3B6D11",
 };
 
-function StatCard({ label, value, sub, color, extraValue, extraLabel }) {
+// ── Compact stat card — units shown as a small pill beside the subtitle ───────
+function StatCard({ label, value, sub, color, extraValue }) {
   return (
     <div className="stat-card" style={{ borderTopColor: color }}>
       <div className="stat-label">{label}</div>
-      <div className="stat-value" style={{ color }}>{value}</div>
-      {extraValue !== undefined && (
-        <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 2 }}>
-          {extraValue.toLocaleString()} units
-        </div>
-      )}
-      {sub && <div className="stat-sub">{sub}</div>}
+      <div className="stat-value" style={{ color, marginBottom: 6 }}>{value}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {sub && <div className="stat-sub" style={{ margin: 0 }}>{sub}</div>}
+        {extraValue !== undefined && (
+          <span style={{
+            fontSize: 11, fontWeight: 700, color,
+            background: color + "18",
+            border: `1px solid ${color}44`,
+            borderRadius: 4, padding: "1px 7px",
+            whiteSpace: "nowrap",
+          }}>
+            {extraValue.toLocaleString()} units
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
+// ── Stage group with tray + units badges ──────────────────────────────────────
 function StageGroup({ stage, trays, color }) {
   const [open, setOpen] = useState(false);
   const totalUnits = trays.reduce((sum, t) => sum + (t.total_units || 0), 0);
@@ -34,18 +44,20 @@ function StageGroup({ stage, trays, color }) {
         onClick={() => setOpen(o => !o)}
       >
         <span className="sg-name">{stage.label || stage.id}</span>
-        {/* Tray count badge */}
+
         <span className="sg-count" style={{ background: color + "33", color }}>
           {trays.length} tray{trays.length !== 1 ? "s" : ""}
         </span>
-        {/* Units badge */}
+
         <span style={{
-          background: color + "22", color,
-          borderRadius: 12, padding: "2px 9px",
+          background: color + "18", color,
+          border: `1px solid ${color}44`,
+          borderRadius: 10, padding: "2px 9px",
           fontSize: 11, fontWeight: 600,
         }}>
           {totalUnits.toLocaleString()} units
         </span>
+
         <span style={{ color: "var(--muted)", fontSize: 12, marginLeft: 4 }}>
           {open ? "▲" : "▼"}
         </span>
@@ -107,12 +119,13 @@ function StageGroup({ stage, trays, color }) {
   );
 }
 
+// ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [stats,           setStats]           = useState(null);
   const [trays,           setTrays]           = useState([]);
   const [pipeline,        setPipeline]        = useState(null);
   const [loading,         setLoading]         = useState(true);
-  const [selectedProject, setSelectedProject] = useState(null); // null = All
+  const [selectedProject, setSelectedProject] = useState(null);
 
   async function load(project = selectedProject) {
     setLoading(true);
@@ -149,16 +162,17 @@ export default function Dashboard() {
   }
   if (!stats || !pipeline) return null;
 
-  const projects     = pipeline.projects || [];
-  const activeTrays  = trays.filter(t => t.stage !== "COMPLETE" && t.stage !== "SPLIT");
-  const byStage      = {};
+  const projects    = pipeline.projects || [];
+  const activeTrays = trays.filter(t => t.stage !== "COMPLETE" && t.stage !== "SPLIT");
+  const byStage     = {};
   activeTrays.forEach(t => {
     byStage[t.stage] = byStage[t.stage] || [];
     byStage[t.stage].push(t);
   });
 
-  const total = stats.total_active + stats.total_complete;
-  const pct   = total > 0 ? Math.round((stats.total_complete / total) * 100) : 0;
+  const total        = stats.total_active + stats.total_complete;
+  const pct          = total > 0 ? Math.round((stats.total_complete / total) * 100) : 0;
+  const activeProject = selectedProject ? projects.find(p => p.id === selectedProject) : null;
 
   return (
     <div>
@@ -171,40 +185,19 @@ export default function Dashboard() {
           Project:
         </span>
 
-        {/* All pill */}
-        <button
-          onClick={() => handleProjectSelect(null)}
-          style={{
-            padding: "6px 16px", borderRadius: 20, fontSize: 12,
-            fontWeight: 600, cursor: "pointer", border: "1px solid",
-            fontFamily: "inherit",
-            background:   !selectedProject ? "rgba(55,138,221,.15)" : "var(--surface)",
-            borderColor:  !selectedProject ? "var(--accent)" : "var(--border)",
-            color:        !selectedProject ? "var(--accent)" : "var(--muted)",
-          }}>
+        <button onClick={() => handleProjectSelect(null)} style={pill(!selectedProject)}>
           All Projects
         </button>
 
-        {projects.map(p => {
-          const active = selectedProject === p.id;
-          return (
-            <button
-              key={p.id}
-              onClick={() => handleProjectSelect(p.id)}
-              style={{
-                padding: "6px 16px", borderRadius: 20, fontSize: 12,
-                fontWeight: 600, cursor: "pointer", border: "1px solid",
-                fontFamily: "inherit",
-                background:  active ? "rgba(55,138,221,.15)" : "var(--surface)",
-                borderColor: active ? "var(--accent)" : "var(--border)",
-                color:       active ? "var(--accent)" : "var(--muted)",
-              }}>
-              {p.label}
-            </button>
-          );
-        })}
+        {projects.map(p => (
+          <button
+            key={p.id}
+            onClick={() => handleProjectSelect(p.id)}
+            style={pill(selectedProject === p.id)}>
+            {p.label}
+          </button>
+        ))}
 
-        {/* Refresh button */}
         <button
           className="btn"
           style={{ marginLeft: "auto" }}
@@ -220,35 +213,35 @@ export default function Dashboard() {
         <StatCard
           label="Active in Pipeline"
           value={stats.total_active}
+          sub="trays in progress"
           extraValue={stats.total_active_units}
           color="#378ADD"
-          sub="trays in progress"
         />
         <StatCard
           label="Completed Today"
           value={stats.completed_today}
+          sub="finished today"
           extraValue={stats.completed_today_units}
           color="#3B6D11"
-          sub="finished today"
         />
         <StatCard
           label="FIFO Violations"
           value={stats.fifo_violated}
-          color={stats.fifo_violated > 0 ? "#E24B4A" : "#3B6D11"}
           sub="flagged trays"
+          color={stats.fifo_violated > 0 ? "#E24B4A" : "#3B6D11"}
         />
         <StatCard
           label="Stuck / Bottlenecks"
           value={stats.stuck_count}
-          color={stats.stuck_count > 0 ? "#BA7517" : "#3B6D11"}
           sub="idle 1h+"
+          color={stats.stuck_count > 0 ? "#BA7517" : "#3B6D11"}
         />
         <StatCard
           label="Total Complete"
           value={stats.total_complete}
+          sub={`${pct}% of all trays`}
           extraValue={stats.total_complete_units}
           color="#3B6D11"
-          sub={`${pct}% of all trays`}
         />
       </div>
 
@@ -256,9 +249,9 @@ export default function Dashboard() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">
           Pipeline Overview
-          {selectedProject && (
-            <span className="tag tag-blue" style={{ marginLeft: 8 }}>
-              {projects.find(p => p.id === selectedProject)?.label || selectedProject}
+          {activeProject && (
+            <span className="tag tag-blue" style={{ marginLeft: 8, textTransform: "none" }}>
+              {activeProject.label}
             </span>
           )}
         </div>
@@ -278,26 +271,28 @@ export default function Dashboard() {
                     style={{
                       background:  count > 0 ? col + "22" : "var(--surface)",
                       borderColor: count > 0 ? col : "var(--border)",
-                      minWidth: 90,
+                      minWidth: 88,
                     }}
                   >
-                    {/* Tray count — large */}
                     <div style={{
-                      fontSize: 20, fontWeight: 700,
+                      fontSize: 20, fontWeight: 700, lineHeight: 1,
                       color: count > 0 ? col : "var(--muted)",
                     }}>
                       {count}
                     </div>
-                    {/* Units count — small, only shown when there are trays */}
                     {count > 0 && (
                       <div style={{
                         fontSize: 10, fontWeight: 600,
-                        color: col, opacity: 0.8, marginBottom: 2,
+                        color: col, opacity: 0.85,
+                        marginTop: 2, marginBottom: 2,
                       }}>
                         {units.toLocaleString()} u
                       </div>
                     )}
-                    <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                    <div style={{
+                      fontSize: 10, color: "var(--muted)",
+                      marginTop: count > 0 ? 0 : 4,
+                    }}>
                       {s.label}
                     </div>
                   </div>
@@ -306,13 +301,16 @@ export default function Dashboard() {
             })}
         </div>
 
-        {/* Overall throughput bar */}
-        <div className="pbar-wrap" style={{ marginTop: 12 }}>
+        <div className="pbar-wrap" style={{ marginTop: 14 }}>
           <div className="pbar-top">
             <span>Overall throughput</span>
-            <span>
-              {pct}% &nbsp;·&nbsp;
-              {stats.total_complete_units?.toLocaleString() || 0} units completed
+            <span style={{ color: "var(--muted)" }}>
+              {pct}%
+              {stats.total_complete_units > 0 && (
+                <span style={{ marginLeft: 8, color: "#3B6D11", fontWeight: 600 }}>
+                  · {stats.total_complete_units.toLocaleString()} units completed
+                </span>
+              )}
             </span>
           </div>
           <div className="pbar-bg">
@@ -321,13 +319,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Stage groups ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      {/* ── Active tray groups ── */}
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        alignItems: "center", marginBottom: 12,
+      }}>
         <div className="card-title" style={{ margin: 0 }}>
           Active Trays by Stage
-          {selectedProject && (
+          {activeProject && (
             <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>
-              — {projects.find(p => p.id === selectedProject)?.label}
+              — {activeProject.label}
             </span>
           )}
         </div>
@@ -335,8 +336,8 @@ export default function Dashboard() {
 
       {Object.keys(byStage).length === 0 && (
         <div style={{ color: "var(--muted)", textAlign: "center", padding: 40 }}>
-          {selectedProject
-            ? `No active trays for ${projects.find(p => p.id === selectedProject)?.label || selectedProject}.`
+          {activeProject
+            ? `No active trays for ${activeProject.label}.`
             : "No active trays in the pipeline."}
         </div>
       )}
@@ -353,4 +354,16 @@ export default function Dashboard() {
         ))}
     </div>
   );
+}
+
+// ── Project pill button style ──────────────────────────────────────────────────
+function pill(active) {
+  return {
+    padding: "5px 14px", borderRadius: 20, fontSize: 12,
+    fontWeight: 600, cursor: "pointer", border: "1px solid",
+    fontFamily: "inherit", transition: "all .15s",
+    background:  active ? "rgba(55,138,221,.15)" : "var(--surface)",
+    borderColor: active ? "var(--accent)"        : "var(--border)",
+    color:       active ? "var(--accent)"        : "var(--muted)",
+  };
 }
