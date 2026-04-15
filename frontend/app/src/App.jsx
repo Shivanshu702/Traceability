@@ -6,13 +6,13 @@ import Dashboard        from "./pages/Dashboard";
 import AlertDashboard   from "./pages/AlertDashboard";
 import LoginPage        from "./pages/LoginPage";
 import AdminPage        from "./pages/AdminPage";
+import ManageTraysPage  from "./pages/ManageTraysPage";
 import "./App.css";
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("dashboard");
 
-  // ── Restore session + handle ?scan= QR param ──────────────────────────────
   useEffect(() => {
     const token     = localStorage.getItem("token");
     const username  = localStorage.getItem("username");
@@ -55,6 +55,19 @@ export default function App() {
 
   const isAdmin = user.role === "admin";
 
+  // Nav tabs — Manage Trays is admin-only
+  const navTabs = [
+    { key: "dashboard", label: "📊 Dashboard" },
+    { key: "scan",      label: "📷 Scan" },
+    { key: "history",   label: "📋 History" },
+    { key: "create",    label: "➕ Create Trays" },
+    ...(isAdmin ? [
+      { key: "manage",  label: "🗂 Manage Trays" },
+      { key: "alerts",  label: "🚨 Alerts" },
+      { key: "admin",   label: "⚙ Admin" },
+    ] : []),
+  ];
+
   return (
     <div className="app">
       {/* Header */}
@@ -81,16 +94,7 @@ export default function App() {
 
       {/* Nav */}
       <nav className="nav">
-        {[
-          { key: "dashboard", label: "📊 Dashboard" },
-          { key: "scan",      label: "📷 Scan" },
-          { key: "history",   label: "📋 History" },
-          { key: "create",    label: "➕ Create Trays" },
-          ...(isAdmin ? [
-            { key: "alerts", label: "🚨 Alerts" },
-            { key: "admin",  label: "⚙ Admin" },
-          ] : []),
-        ].map(({ key, label }) => (
+        {navTabs.map(({ key, label }) => (
           <button
             key={key}
             className={`nb ${page === key ? "on" : ""}`}
@@ -107,6 +111,7 @@ export default function App() {
         {page === "scan"      && <ScanPage />}
         {page === "history"   && <HistoryPage />}
         {page === "create"    && <CreateTraysPage />}
+        {page === "manage"    && isAdmin && <ManageTraysPage />}
         {page === "alerts"    && isAdmin && <AlertDashboard />}
         {page === "admin"     && isAdmin && <AdminPage />}
       </main>
