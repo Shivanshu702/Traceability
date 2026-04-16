@@ -441,47 +441,147 @@ function ExportTab() {
 function AuditTab() {
   const [logs,    setLogs]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [limit,   setLimit]   = useState(200);
+  const [filter,  setFilter]  = useState("");
 
-  useEffect(() => {
-    getAuditLog(200).then(d => { setLogs(Array.isArray(d) ? d : []); setLoading(false); });
-  }, []);
+  function loadLogs(lim = limit) {
+    setLoading(true);
+    getAuditLog(lim).then(d => {
+      setLogs(Array.isArray(d) ? d : []);
+      setLoading(false);
+    });
+  }
+
+  useEffect(() => { loadLogs(); }, []);
 
   function fmtDate(iso) {
     if (!iso) return "—";
     return new Date(iso).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "medium" });
   }
 
+  // Download visible logs as CSV
+  function downloadCSV() {
+    const rows = [
+      ["Timestamp", "User", "Action", "Details"],
+      ...filtered.map(l => [
+        fmtDate(l.timestamp),
+        l.username || "",
+        l.action   || "",
+        (l.details || "").replace(/,/g, ";"),
+      ]),
+    ];
+    const csv  = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `audit_log_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const filtered = logs.filter(l => {
+    if (!filter) return true;
+    const q = filter.toLowerCase();
+    return (
+      (l.username || "").toLowerCase().includes(q) ||
+      (l.action   || "").toLowerCase().includes(q) ||
+      (l.details  || "").toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div style={card}>
-      <div style={cardTitle}>Audit Log ({logs.length})</div>
-      {loading ? <Spin /> : (
-        <div style={{ overflowX: "auto" }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>User</th>
-                <th>Action</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((l, i) => (
-                <tr key={i}>
-                  <td style={{ fontSize: 12, color: "#6B7E95", whiteSpace: "nowrap" }}>
-                    {fmtDate(l.timestamp)}
-                  </td>
-                  <td><span style={{ fontFamily: "monospace" }}>{l.username}</span></td>
-                  <td>
-                    <span className={`tag ${actionTag(l.action)}`}>{l.action}</span>
-                  </td>
-                  <td style={{ fontSize: 12, color: "#6B7E95" }}>{l.details || "—"}</td>
+    <div>
+      {/* Toolbar */}
+      <div style={{
+        ...card,
+        display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
+      }}>
+        {/* Search */}
+        <input
+          style={{ ...inp, flex: 2, minWidth: 180 }}
+          placeholder="Search user, action, details…"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+        />
+
+        {/* Limit selector */}
+        <select
+          style={{ ...inp, width: "auto", flex: "none" }}
+          value={limit}
+          onChange={e => { setLimit(+e.target.value); loadLogs(+e.target.value); }}
+        >
+          <option value={100}>Last 100</option>
+          <option value={200}>Last 200</option>
+          <option value={500}>Last 500</option>
+          <option value={1000}>Last 1000</option>
+        </select>
+
+        {/* Refresh */}
+        <button style={btnGray} onClick={() => loadLogs()}>
+          ↻ Refresh
+        </button>
+
+        {/* Download CSV */}
+        <button
+          style={{ ...btnBlue, display: "flex", alignItems: "center", gap: 6 }}
+          onClick={downloadCSV}
+          disabled={filtered.length === 0}
+        >
+          ⬇ Download CSV
+        </button>
+      </div>
+
+      {/* Log count info */}
+      <div style={{
+        fontSize: 11, color: "#6B7E95", marginBottom: 8,
+        display: "flex", gap: 16,
+      }}>
+        <span>{filtered.length} entries shown</span>
+        {filter && <span style={{ color: "#FAC775" }}>⚠ Filter active</span>}
+      </div>
+
+      {/* Table */}
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        {loading ? <Spin /> : filtered.length === 0 ? (
+          <div style={{ padding: 32, textAlign: "center", color: "#6B7E95" }}>
+            No audit log entries found.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Details</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {filtered.map((l, i) => (
+                  <tr key={i}>
+                    <td style={{ fontSize: 12, color: "#6B7E95", whiteSpace: "nowrap" }}>
+                      {fmtDate(l.timestamp)}
+                    </td>
+                    <td>
+                      <span style={{ fontFamily: "monospace", fontSize: 12 }}>
+                        {l.username}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`tag ${actionTag(l.action)}`}>{l.action}</span>
+                    </td>
+                    <td style={{ fontSize: 12, color: "#6B7E95", maxWidth: 300 }}>
+                      {l.details || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
