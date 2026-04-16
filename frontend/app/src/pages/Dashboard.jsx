@@ -715,12 +715,26 @@ export default function Dashboard() {
 
   const total         = stats.total_active + stats.total_complete;
   const pct           = total > 0 ? Math.round((stats.total_complete / total) * 100) : 0;
-  const totalUnitsAll = trays.reduce((s, t) => s + (t.total_units||0), 0);
+
+  // Exclude SPLIT parent trays — they are archived originals, not real production units.
+  // Without this, a split tray (450 units) + its 2 children (225 each) = 900 — double counted.
+  const nonSplitTrays = trays.filter(t => t.stage !== "SPLIT");
+  const totalUnitsAll = nonSplitTrays.reduce((s, t) => s + (t.total_units||0), 0);
+
   const totalScans    = scanLog.length;
   const fifoRate      = total > 0
     ? Math.round(((total - (stats.fifo_violated||0)) / total) * 100)
     : 100;
   const activeProject = selectedProject ? projects.find(p => p.id === selectedProject) : null;
+
+  // BAT_MOUNT pipeline card should show combined count of:
+  // trays waiting at BAT_MOUNT + trays already at BAT_SOL_R + trays at BAT_SOL_M
+  const batMountCount = (stats.stage_counts?.["BAT_MOUNT"] || 0)
+                      + (stats.stage_counts?.["BAT_SOL_R"] || 0)
+                      + (stats.stage_counts?.["BAT_SOL_M"] || 0);
+  const batMountUnits = (stats.stage_units?.["BAT_MOUNT"]  || 0)
+                      + (stats.stage_units?.["BAT_SOL_R"]  || 0)
+                      + (stats.stage_units?.["BAT_SOL_M"]  || 0);
 
   // ── Chart data ──────────────────────────────────────────────────────────────
   const donutData = stages
@@ -745,11 +759,11 @@ export default function Dashboard() {
   const dailyData = Object.entries(dayMap).map(([date, scans]) => ({ date, scans }));
 
   const shiftMap = { Morning:0, Afternoon:0, Night:0 };
-  trays.forEach(t => { const sh=t.shift||"Morning"; if(sh in shiftMap) shiftMap[sh]++; });
+  nonSplitTrays.forEach(t => { const sh=t.shift||"Morning"; if(sh in shiftMap) shiftMap[sh]++; });
   const shiftData = Object.entries(shiftMap).map(([shift,count]) => ({ shift, count }));
 
   const projMap = {};
-  trays.forEach(t => {
+  nonSplitTrays.forEach(t => {
     if (!t.project) return;
     projMap[t.project] = (projMap[t.project]||0) + (t.total_units||0);
   });
@@ -859,8 +873,8 @@ export default function Dashboard() {
               {i > 0 && <span style={{ color:"#6B7E95", fontSize:14, flexShrink:0 }}>›</span>}
               <StageCard
                 stage={s}
-                count={stats.stage_counts?.[s.id]||0}
-                units={stats.stage_units?.[s.id]||0}
+                count={s.id === "BAT_MOUNT" ? batMountCount : (stats.stage_counts?.[s.id]||0)}
+                units={s.id === "BAT_MOUNT" ? batMountUnits : (stats.stage_units?.[s.id]||0)}
                 totalTrays={total}
                 onExpand={s.id === "BAT_MOUNT" ? () => setBranchModal(true) : undefined}
               />
