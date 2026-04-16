@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
 import { getStats, getAllTrays, getPipeline, getScanLog } from "../api/api";
 
-// ── Color themes per stage ────────────────────────────────────────────────────
+// ── Stage color themes ────────────────────────────────────────────────────────
 const THEME = {
-  CREATED:    { bg:"#1C2333", accent:"#888780" },
-  RACK1_TOP:  { bg:"#0D1F35", accent:"#378ADD" },
-  RACK2_BTM:  { bg:"#1A1640", accent:"#7F77DD" },
-  BAT_MOUNT:  { bg:"#2A1E0A", accent:"#EF9F27" },
-  BAT_SOL_R:  { bg:"#2A0D0D", accent:"#E24B4A" },
-  BAT_SOL_M:  { bg:"#0C2620", accent:"#5DCAA5" },
-  RACK3:      { bg:"#2A0E1F", accent:"#D4537E" },
-  DEPANEL_IN: { bg:"#201500", accent:"#BA7517" },
-  TESTING:    { bg:"#081428", accent:"#185FA5" },
-  COMPLETE:   { bg:"#0C1E07", accent:"#3B6D11" },
+  CREATED:    { bg:"#0E1520", accent:"#6B7E95", border:"#6B7E9540" },
+  RACK1_TOP:  { bg:"#091525", accent:"#378ADD", border:"#378ADD40" },
+  RACK2_BTM:  { bg:"#100E2A", accent:"#7F77DD", border:"#7F77DD40" },
+  BAT_MOUNT:  { bg:"#1A1000", accent:"#EF9F27", border:"#EF9F2740" },
+  BAT_SOL_R:  { bg:"#1A0808", accent:"#E24B4A", border:"#E24B4A40" },
+  BAT_SOL_M:  { bg:"#061A14", accent:"#5DCAA5", border:"#5DCAA540" },
+  RACK3:      { bg:"#190A14", accent:"#D4537E", border:"#D4537E40" },
+  DEPANEL_IN: { bg:"#150D00", accent:"#BA7517", border:"#BA751740" },
+  TESTING:    { bg:"#050D1C", accent:"#185FA5", border:"#185FA540" },
+  COMPLETE:   { bg:"#061309", accent:"#3B6D11", border:"#3B6D1140" },
 };
 
 const CHART_COLORS = [
@@ -20,44 +20,50 @@ const CHART_COLORS = [
   "#5DCAA5","#D4537E","#BA7517","#3B6D11","#888780",
 ];
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color, icon, extraValue }) {
+// SVG icon paths (inline, no emoji, crisp at any size)
+const ICONS = {
+  grid:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+  units:  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>,
+  active: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>,
+  done:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 6L9 17l-5-5"/></svg>,
+  fifo:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>,
+  scan:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 5v2M12 17v2M5 12H3M21 12h-2M7.76 7.76 6.34 6.34M17.66 17.66l-1.42-1.42M7.76 16.24l-1.42 1.42M17.66 6.34l-1.42 1.42"/></svg>,
+  expand: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>,
+  close:  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>,
+};
+
+// ── Stat card (matches image 5 layout) ───────────────────────────────────────
+function StatCard({ label, main, sub1, sub2, color, icon }) {
   return (
     <div style={{
-      background: "#111827",
-      border: `1px solid ${color}33`,
-      borderTop: `3px solid ${color}`,
-      borderRadius: 12, padding: "18px 20px",
+      background: "#0D1320",
+      border: `1px solid ${color}55`,
+      borderTop: `2px solid ${color}`,
+      borderRadius: 12, padding: "18px 18px 16px",
       position: "relative", overflow: "hidden", minWidth: 0,
+      flex: "1 1 140px",
     }}>
       <div style={{
-        position:"absolute", top:-16, right:-16,
-        width:72, height:72, borderRadius:"50%",
-        background: color + "18", pointerEvents:"none",
+        position:"absolute", top:-20, right:-20, width:80, height:80,
+        borderRadius:"50%", background:color+"12", pointerEvents:"none",
       }}/>
       <div style={{
-        position:"absolute", top:12, right:14,
-        fontSize:18, opacity:0.65, lineHeight:1,
-      }}>{icon}</div>
-      <div style={{ fontSize:11, fontWeight:700, color:"#6B7E95",
-                    textTransform:"uppercase", letterSpacing:".06em", marginBottom:10 }}>
+        position:"absolute", top:14, right:14,
+        color: color, opacity:0.7,
+      }}>
+        {icon}
+      </div>
+      <div style={{
+        fontSize:10, fontWeight:700, color:"#6B7E95",
+        textTransform:"uppercase", letterSpacing:".08em", marginBottom:10,
+      }}>
         {label}
       </div>
-      <div style={{ fontSize:34, fontWeight:700, color, lineHeight:1, marginBottom:6 }}>
-        {value}
+      <div style={{ fontSize:38, fontWeight:700, color, lineHeight:1, marginBottom:6 }}>
+        {main}
       </div>
-      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-        {sub && <span style={{ fontSize:12, color:"#6B7E95" }}>{sub}</span>}
-        {extraValue !== undefined && (
-          <span style={{
-            fontSize:11, fontWeight:700, color,
-            background:color+"18", border:`1px solid ${color}44`,
-            borderRadius:4, padding:"1px 7px", whiteSpace:"nowrap",
-          }}>
-            {(extraValue||0).toLocaleString()} units
-          </span>
-        )}
-      </div>
+      {sub1 && <div style={{ fontSize:12, color:"#6B7E95", marginBottom:2 }}>{sub1}</div>}
+      {sub2 && <div style={{ fontSize:11, color:color+"cc", fontWeight:600 }}>{sub2}</div>}
     </div>
   );
 }
@@ -68,40 +74,40 @@ function StageCard({ stage, count, units, totalTrays }) {
   const pct = totalTrays > 0 ? Math.round((count / totalTrays) * 100) : 0;
   return (
     <div style={{
-      background: t.bg,
-      border: `1px solid ${t.accent}44`,
-      borderRadius:12, padding:"14px 14px 10px",
-      minWidth:110, flex:"1 1 110px",
-      display:"flex", flexDirection:"column", gap:4,
+      background: t.bg, border: `1px solid ${t.border}`,
+      borderRadius: 10, padding: "12px 12px 9px",
+      minWidth: 108, flex: "1 1 108px",
+      display:"flex", flexDirection:"column", gap:3,
       position:"relative", overflow:"hidden",
     }}>
       <div style={{
-        position:"absolute", top:-18, right:-18,
-        width:60, height:60, borderRadius:"50%",
-        background:t.accent+"22", pointerEvents:"none",
+        position:"absolute", top:-14, right:-14,
+        width:52, height:52, borderRadius:"50%",
+        background:t.accent+"1A", pointerEvents:"none",
       }}/>
       <div style={{
         fontSize:9, fontWeight:700, color:t.accent,
         textTransform:"uppercase", letterSpacing:".05em",
-        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginBottom:4,
+        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+        marginBottom:3,
       }}>
         {stage.label}
       </div>
       <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
-        <span style={{ fontSize:28, fontWeight:700, color:t.accent, lineHeight:1 }}>{count}</span>
-        <span style={{ fontSize:11, color:t.accent+"88" }}>trays</span>
+        <span style={{ fontSize:26, fontWeight:700, color:t.accent, lineHeight:1 }}>{count}</span>
+        <span style={{ fontSize:10, color:t.accent+"77" }}>trays</span>
       </div>
       <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
-        <span style={{ fontSize:15, fontWeight:600, color:t.accent+"bb" }}>
+        <span style={{ fontSize:13, fontWeight:600, color:t.accent+"aa" }}>
           {(units||0).toLocaleString()}
         </span>
-        <span style={{ fontSize:11, color:t.accent+"66" }}>units</span>
+        <span style={{ fontSize:10, color:t.accent+"55" }}>units</span>
       </div>
-      <div style={{ marginTop:8 }}>
-        <div style={{ height:3, background:t.accent+"22", borderRadius:2, overflow:"hidden" }}>
+      <div style={{ marginTop:7 }}>
+        <div style={{ height:2, background:t.accent+"1A", borderRadius:2, overflow:"hidden" }}>
           <div style={{ height:"100%", width:pct+"%", background:t.accent, borderRadius:2 }}/>
         </div>
-        <div style={{ fontSize:9, color:t.accent+"77", marginTop:3, textAlign:"right" }}>
+        <div style={{ fontSize:8, color:t.accent+"66", marginTop:2, textAlign:"right" }}>
           {pct}%
         </div>
       </div>
@@ -109,114 +115,217 @@ function StageCard({ stage, count, units, totalTrays }) {
   );
 }
 
-// ── Stage group (expandable) ───────────────────────────────────────────────────
-function StageGroup({ stage, trays }) {
+// ── Stage group — expanded row list, with BAT_MOUNT branch breakdown ──────────
+function StageGroup({ stage, trays, stageCounts, stageUnits }) {
   const [open, setOpen] = useState(false);
   const t          = THEME[stage.id] || THEME.CREATED;
   const totalUnits = trays.reduce((s, t) => s + (t.total_units||0), 0);
+
+  // BAT_MOUNT branch breakdown
+  const isBranchStage = stage.id === "BAT_MOUNT";
+  const robotTrays    = trays.filter(tr => tr.stage === "BAT_SOL_R");
+  const manualTrays   = trays.filter(tr => tr.stage === "BAT_SOL_M");
+  const robotUnits    = robotTrays.reduce((s, tr) => s + (tr.total_units||0), 0);
+  const manualUnits   = manualTrays.reduce((s, tr) => s + (tr.total_units||0), 0);
+
+  // Count children of BAT_MOUNT from stageCounts
+  const solRCount  = stageCounts?.["BAT_SOL_R"] || 0;
+  const solMCount  = stageCounts?.["BAT_SOL_M"] || 0;
+  const solRUnits  = stageUnits?.["BAT_SOL_R"]  || 0;
+  const solMUnits  = stageUnits?.["BAT_SOL_M"]  || 0;
+
   return (
     <div style={{
-      border:`1px solid ${t.accent}33`,
+      border:`1px solid ${t.border}`,
       borderLeft:`3px solid ${t.accent}`,
       borderRadius:10, marginBottom:8, overflow:"hidden",
     }}>
-      <div style={{
-        display:"flex", alignItems:"center", gap:10,
-        padding:"11px 14px", cursor:"pointer", background:t.bg,
-      }} onClick={() => setOpen(o => !o)}>
+      {/* Header row */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display:"flex", alignItems:"center", gap:10,
+          padding:"11px 14px", cursor:"pointer", background:t.bg,
+        }}
+      >
         <span style={{ fontSize:13, fontWeight:600, flex:1, color:"#E8EFF8" }}>
           {stage.label}
         </span>
         <span style={{
-          background:t.accent+"33", color:t.accent,
+          background:t.accent+"2A", color:t.accent,
           borderRadius:12, padding:"2px 9px", fontSize:11, fontWeight:700,
         }}>
           {trays.length} trays
         </span>
         <span style={{
-          background:t.accent+"18", color:t.accent,
-          border:`1px solid ${t.accent}44`,
+          background:t.accent+"15", color:t.accent,
+          border:`1px solid ${t.accent}33`,
           borderRadius:10, padding:"2px 9px", fontSize:11, fontWeight:600,
         }}>
           {totalUnits.toLocaleString()} units
         </span>
+
+        {/* BAT_MOUNT: show branch mini-badges */}
+        {isBranchStage && (solRCount > 0 || solMCount > 0) && (
+          <>
+            <span style={{
+              background:"#E24B4A15", color:"#E24B4A",
+              border:"1px solid #E24B4A33",
+              borderRadius:8, padding:"2px 8px", fontSize:10, fontWeight:600,
+            }}>
+              🤖 {solRCount} ({solRUnits.toLocaleString()})
+            </span>
+            <span style={{
+              background:"#5DCAA515", color:"#5DCAA5",
+              border:"1px solid #5DCAA533",
+              borderRadius:8, padding:"2px 8px", fontSize:10, fontWeight:600,
+            }}>
+              ✋ {solMCount} ({solMUnits.toLocaleString()})
+            </span>
+          </>
+        )}
+
         <span style={{ color:"#6B7E95", fontSize:12 }}>{open ? "▲" : "▼"}</span>
       </div>
+
+      {/* Expanded content */}
       {open && (
-        <div style={{ padding:"0 14px 12px", background:"#0A0F1A" }}>
-          <table className="tbl" style={{ marginTop:8 }}>
-            <thead>
-              <tr>
-                <th>Tray ID</th><th>Project</th><th>Units</th>
-                <th>Shift</th><th>FIFO</th><th>Age (h)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trays.map(tr => {
-                const ageH = tr.last_updated
-                  ? Math.round(((Date.now()-new Date(tr.last_updated))/3600000)*10)/10
-                  : "—";
-                return (
-                  <tr key={tr.id}>
-                    <td>
-                      <span className="mono" style={{ fontSize:12 }}>{tr.id}</span>
-                      {tr.parent_id && (
-                        <span className="tag tag-amber" style={{ marginLeft:6 }}>
-                          Part {tr.id.slice(-1)}
+        <div style={{ background:"#080C14" }}>
+          {/* BAT_MOUNT branch breakdown panel */}
+          {isBranchStage && (solRCount > 0 || solMCount > 0) && (
+            <div style={{
+              display:"flex", gap:12, padding:"12px 14px",
+              borderBottom:"1px solid #1E2D42", flexWrap:"wrap",
+            }}>
+              {/* Robot branch */}
+              <div style={{
+                flex:1, minWidth:160,
+                background:"#1A0808", border:"1px solid #E24B4A33",
+                borderLeft:"3px solid #E24B4A",
+                borderRadius:8, padding:"12px 14px",
+              }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#E24B4A",
+                              marginBottom:6 }}>
+                  🤖 Battery Soldered by Robot
+                </div>
+                <div style={{ display:"flex", gap:16 }}>
+                  <div>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#E24B4A" }}>
+                      {solRCount}
+                    </div>
+                    <div style={{ fontSize:10, color:"#E24B4A77" }}>trays</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#E24B4Aaa" }}>
+                      {solRUnits.toLocaleString()}
+                    </div>
+                    <div style={{ fontSize:10, color:"#E24B4A55" }}>units</div>
+                  </div>
+                </div>
+              </div>
+              {/* Manual branch */}
+              <div style={{
+                flex:1, minWidth:160,
+                background:"#061A14", border:"1px solid #5DCAA533",
+                borderLeft:"3px solid #5DCAA5",
+                borderRadius:8, padding:"12px 14px",
+              }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#5DCAA5",
+                              marginBottom:6 }}>
+                  ✋ Battery Soldered by Hand
+                </div>
+                <div style={{ display:"flex", gap:16 }}>
+                  <div>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#5DCAA5" }}>
+                      {solMCount}
+                    </div>
+                    <div style={{ fontSize:10, color:"#5DCAA577" }}>trays</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#5DCAA5aa" }}>
+                      {solMUnits.toLocaleString()}
+                    </div>
+                    <div style={{ fontSize:10, color:"#5DCAA555" }}>units</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tray table */}
+          <div style={{ padding:"4px 14px 12px" }}>
+            <table className="tbl" style={{ marginTop:8 }}>
+              <thead>
+                <tr>
+                  <th>Tray ID</th><th>Project</th><th>Units</th>
+                  <th>Shift</th><th>FIFO</th><th>Age (h)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trays.map(tr => {
+                  const ageH = tr.last_updated
+                    ? Math.round(((Date.now()-new Date(tr.last_updated))/3600000)*10)/10
+                    : "—";
+                  return (
+                    <tr key={tr.id}>
+                      <td>
+                        <span className="mono" style={{ fontSize:12 }}>{tr.id}</span>
+                        {tr.parent_id && (
+                          <span className="tag tag-amber" style={{ marginLeft:6 }}>
+                            Part {tr.id.slice(-1)}
+                          </span>
+                        )}
+                      </td>
+                      <td>{tr.project||"—"}</td>
+                      <td style={{ fontWeight:600, color:"#85B7EB" }}>
+                        {(tr.total_units||0).toLocaleString()}
+                      </td>
+                      <td>{tr.shift||"—"}</td>
+                      <td>
+                        {tr.fifo_violated
+                          ? <span className="tag tag-red">⚠ FIFO</span>
+                          : <span className="tag tag-green">✓</span>}
+                      </td>
+                      <td>
+                        <span className={`tag ${ageH>4?"tag-red":ageH>2?"tag-amber":"tag-green"}`}>
+                          {ageH}h
                         </span>
-                      )}
-                    </td>
-                    <td>{tr.project||"—"}</td>
-                    <td style={{ fontWeight:600, color:"#85B7EB" }}>
-                      {(tr.total_units||0).toLocaleString()}
-                    </td>
-                    <td>{tr.shift||"—"}</td>
-                    <td>
-                      {tr.fifo_violated
-                        ? <span className="tag tag-red">⚠ FIFO</span>
-                        : <span className="tag tag-green">✓</span>}
-                    </td>
-                    <td>
-                      <span className={`tag ${ageH>4?"tag-red":ageH>2?"tag-amber":"tag-green"}`}>
-                        {ageH}h
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ── Pure CSS bar chart — no external library ──────────────────────────────────
-function BarChart({ data, valueKey, labelKey, colors, height = 140, unit = "" }) {
-  const max = Math.max(...data.map(d => d[valueKey] || 0), 1);
+// ── CSS bar chart ─────────────────────────────────────────────────────────────
+function BarChart({ data, valueKey, labelKey, colors, height=140 }) {
+  const max = Math.max(...data.map(d => d[valueKey]||0), 1);
   return (
-    <div style={{ display:"flex", alignItems:"flex-end", gap:6,
-                  height, paddingTop:8, paddingBottom:0 }}>
+    <div style={{ display:"flex", alignItems:"flex-end", gap:6, height, paddingTop:18 }}>
       {data.map((d, i) => {
-        const val = d[valueKey] || 0;
-        const pct = (val / max) * 100;
-        const col = Array.isArray(colors) ? colors[i % colors.length] : colors;
+        const val  = d[valueKey] || 0;
+        const pct  = (val / max) * 100;
+        const col  = Array.isArray(colors) ? colors[i % colors.length] : colors;
         return (
-          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column",
-                                alignItems:"center", gap:4, height:"100%" }}>
+          <div key={i} style={{
+            flex:1, display:"flex", flexDirection:"column",
+            alignItems:"center", gap:4, height:"100%",
+          }}>
             <div style={{ flex:1, display:"flex", alignItems:"flex-end", width:"100%" }}>
-              <div
-                title={`${d[labelKey]}: ${val.toLocaleString()}${unit}`}
-                style={{
-                  width:"100%", height: pct + "%", minHeight: val > 0 ? 4 : 0,
-                  background: col, borderRadius:"4px 4px 0 0",
-                  transition:"height .4s", cursor:"default",
-                  position:"relative",
-                }}>
+              <div style={{
+                width:"100%", height:pct+"%", minHeight:val>0?4:0,
+                background:col, borderRadius:"4px 4px 0 0", transition:"height .4s",
+                position:"relative",
+              }}>
                 {val > 0 && (
                   <div style={{
-                    position:"absolute", top:-18, left:"50%",
+                    position:"absolute", top:-16, left:"50%",
                     transform:"translateX(-50%)",
                     fontSize:9, fontWeight:700, color:col, whiteSpace:"nowrap",
                   }}>
@@ -228,7 +337,7 @@ function BarChart({ data, valueKey, labelKey, colors, height = 140, unit = "" })
             <div style={{
               fontSize:9, color:"#6B7E95", textAlign:"center",
               whiteSpace:"nowrap", overflow:"hidden",
-              textOverflow:"ellipsis", width:"100%", maxWidth:60,
+              textOverflow:"ellipsis", width:"100%",
             }}>
               {d[labelKey]}
             </div>
@@ -239,68 +348,121 @@ function BarChart({ data, valueKey, labelKey, colors, height = 140, unit = "" })
   );
 }
 
-// ── Pure CSS donut chart ───────────────────────────────────────────────────────
-function DonutChart({ data, size = 120 }) {
+// ── SVG donut ─────────────────────────────────────────────────────────────────
+function DonutChart({ data, size=120 }) {
   const total = data.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return (
+  if (!total) return (
     <div style={{ width:size, height:size, display:"flex", alignItems:"center",
                   justifyContent:"center", color:"#6B7E95", fontSize:11 }}>
       No data
     </div>
   );
-
+  const r = 44, cx = 50, cy = 50, circ = 2 * Math.PI * r;
   let offset = 0;
-  const r = 45, cx = 50, cy = 50;
-  const circ = 2 * Math.PI * r;
-
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} style={{ overflow:"visible" }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1E2D42" strokeWidth={12}/>
+    <svg viewBox="0 0 100 100" width={size} height={size}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1E2D42" strokeWidth={11}/>
       {data.map((d, i) => {
-        const pct  = d.value / total;
+        const pct = d.value / total;
         const dash = pct * circ;
-        const gap  = circ - dash;
         const rot  = offset * 360 - 90;
-        offset    += pct;
+        offset += pct;
         return (
-          <circle key={i} cx={cx} cy={cy} r={r}
-            fill="none"
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
             stroke={d.color || CHART_COLORS[i % CHART_COLORS.length]}
-            strokeWidth={12}
-            strokeDasharray={`${dash} ${gap}`}
-            strokeDashoffset={0}
-            transform={`rotate(${rot} ${cx} ${cy})`}
-            strokeLinecap="butt"
-          >
+            strokeWidth={11}
+            strokeDasharray={`${dash} ${circ - dash}`}
+            transform={`rotate(${rot} ${cx} ${cy})`}>
             <title>{d.name}: {d.value}</title>
           </circle>
         );
       })}
-      <text x={cx} y={cy-6} textAnchor="middle"
-        style={{ fontSize:14, fontWeight:700, fill:"#E8EFF8" }}>
+      <text x={cx} y={cy-5} textAnchor="middle"
+        style={{ fontSize:15, fontWeight:700, fill:"#E8EFF8" }}>
         {total}
       </text>
       <text x={cx} y={cy+8} textAnchor="middle"
-        style={{ fontSize:7, fill:"#6B7E95" }}>
-        TRAYS
-      </text>
+        style={{ fontSize:7, fill:"#6B7E95" }}>TRAYS</text>
     </svg>
   );
 }
 
-// ── Chart card wrapper ────────────────────────────────────────────────────────
-function ChartCard({ title, children, style = {} }) {
+// ── Expandable chart card ─────────────────────────────────────────────────────
+function ChartCard({ title, children, expandContent }) {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div style={{
-      background:"#111827", border:"1px solid #1E2D42",
-      borderRadius:12, padding:"16px 16px 14px", ...style,
-    }}>
-      <div style={{ fontSize:11, fontWeight:700, color:"#6B7E95",
-                    textTransform:"uppercase", letterSpacing:".06em", marginBottom:14 }}>
-        {title}
+    <>
+      <div style={{
+        background:"#0D1320", border:"1px solid #1E2D42",
+        borderRadius:12, padding:"14px 14px 12px",
+      }}>
+        <div style={{
+          display:"flex", alignItems:"center",
+          marginBottom:14,
+        }}>
+          <div style={{
+            fontSize:10, fontWeight:700, color:"#6B7E95",
+            textTransform:"uppercase", letterSpacing:".08em", flex:1,
+          }}>
+            {title}
+          </div>
+          {expandContent && (
+            <button
+              onClick={() => setExpanded(true)}
+              title="Expand chart"
+              style={{
+                background:"none", border:"1px solid #1E2D42",
+                borderRadius:6, padding:"3px 6px", cursor:"pointer",
+                color:"#6B7E95", display:"flex", alignItems:"center",
+              }}>
+              {ICONS.expand}
+            </button>
+          )}
+        </div>
+        {children}
       </div>
-      {children}
-    </div>
+
+      {/* Expanded modal overlay */}
+      {expanded && (
+        <div
+          onClick={() => setExpanded(false)}
+          style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,.75)",
+            zIndex:1000, display:"flex", alignItems:"center",
+            justifyContent:"center", padding:24,
+          }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background:"#0D1320", border:"1px solid #1E2D42",
+              borderRadius:16, padding:"24px 28px",
+              width:"min(760px, 96vw)", maxHeight:"85vh",
+              overflow:"auto",
+            }}>
+            <div style={{
+              display:"flex", alignItems:"center",
+              marginBottom:20,
+            }}>
+              <div style={{
+                fontSize:13, fontWeight:700, color:"#E8EFF8", flex:1,
+              }}>
+                {title}
+              </div>
+              <button
+                onClick={() => setExpanded(false)}
+                style={{
+                  background:"none", border:"none",
+                  cursor:"pointer", color:"#6B7E95",
+                  display:"flex", alignItems:"center",
+                }}>
+                {ICONS.close}
+              </button>
+            </div>
+            {expandContent || children}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -358,13 +520,24 @@ export default function Dashboard() {
     byStage[t.stage] = byStage[t.stage] || [];
     byStage[t.stage].push(t);
   });
-  const total        = stats.total_active + stats.total_complete;
-  const pct          = total > 0 ? Math.round((stats.total_complete / total) * 100) : 0;
+
+  // Also bucket BAT_SOL_R and BAT_SOL_M under BAT_MOUNT for expand view
+  const batMountDisplay = [
+    ...(byStage["BAT_MOUNT"]  || []),
+    ...(byStage["BAT_SOL_R"]  || []),
+    ...(byStage["BAT_SOL_M"]  || []),
+  ];
+
+  const total         = stats.total_active + stats.total_complete;
+  const pct           = total > 0 ? Math.round((stats.total_complete / total) * 100) : 0;
+  const totalUnitsAll = trays.reduce((s, t) => s + (t.total_units||0), 0);
+  const totalScans    = scanLog.length;
+  const fifoRate      = total > 0
+    ? Math.round(((total - (stats.fifo_violated||0)) / total) * 100)
+    : 100;
   const activeProject = selectedProject ? projects.find(p => p.id === selectedProject) : null;
 
   // ── Chart data ──────────────────────────────────────────────────────────────
-
-  // Donut: stage distribution
   const donutData = stages
     .filter(s => (stats.stage_counts?.[s.id]||0) > 0)
     .map((s, i) => ({
@@ -373,200 +546,262 @@ export default function Dashboard() {
       color: CHART_COLORS[i % CHART_COLORS.length],
     }));
 
-  // Daily scans: last 7 days
   const dayMap = {};
   for (let i = 6; i >= 0; i--) {
-    const d   = new Date(Date.now() - i * 86400000);
-    const key = d.toLocaleDateString("en-GB", { day:"2-digit", month:"short" });
-    dayMap[key] = 0;
+    const d = new Date(Date.now() - i * 86400000);
+    dayMap[d.toLocaleDateString("en-GB",{day:"2-digit",month:"short"})] = 0;
   }
   scanLog.forEach(e => {
     if (!e.timestamp) return;
     const key = new Date(e.timestamp)
-      .toLocaleDateString("en-GB", { day:"2-digit", month:"short" });
+      .toLocaleDateString("en-GB",{day:"2-digit",month:"short"});
     if (key in dayMap) dayMap[key]++;
   });
   const dailyData = Object.entries(dayMap).map(([date, scans]) => ({ date, scans }));
 
-  // Shift breakdown
   const shiftMap = { Morning:0, Afternoon:0, Night:0 };
-  trays.forEach(t => {
-    const sh = t.shift || "Morning";
-    if (sh in shiftMap) shiftMap[sh]++;
-  });
-  const shiftData = Object.entries(shiftMap).map(([shift, count]) => ({ shift, count }));
+  trays.forEach(t => { const sh=t.shift||"Morning"; if(sh in shiftMap) shiftMap[sh]++; });
+  const shiftData = Object.entries(shiftMap).map(([shift,count]) => ({ shift, count }));
 
-  // Units by project
   const projMap = {};
   trays.forEach(t => {
     if (!t.project) return;
     projMap[t.project] = (projMap[t.project]||0) + (t.total_units||0);
   });
   const projData = Object.entries(projMap)
-    .map(([project, units]) => ({ project, units }))
-    .sort((a, b) => b.units - a.units)
-    .slice(0, 6);
+    .map(([project,units]) => ({ project, units }))
+    .sort((a,b) => b.units - a.units).slice(0, 8);
 
   return (
     <div>
-      {/* ── Project filter pills ── */}
-      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:20, alignItems:"center" }}>
-        <span style={{ fontSize:12, color:"#6B7E95", fontWeight:600 }}>Project:</span>
-        <button onClick={() => handleProjectSelect(null)} style={pill(!selectedProject)}>
-          All Projects
+      {/* ── Project filter ── */}
+      <div style={{
+        display:"flex", gap:8, flexWrap:"wrap",
+        marginBottom:20, alignItems:"center",
+      }}>
+        <span style={{ fontSize:11, fontWeight:700, color:"#6B7E95",
+                       textTransform:"uppercase", letterSpacing:".06em" }}>
+          Project
+        </span>
+        <button onClick={() => handleProjectSelect(null)} style={pill(!selectedProject, "#378ADD")}>
+          All
         </button>
         {projects.map(p => (
           <button key={p.id} onClick={() => handleProjectSelect(p.id)}
-            style={pill(selectedProject === p.id)}>
+            style={pill(selectedProject === p.id, "#378ADD")}>
             {p.label}
           </button>
         ))}
-        <button className="btn" style={{ marginLeft:"auto" }}
+        <button className="btn" style={{ marginLeft:"auto", fontSize:12 }}
           onClick={() => load(selectedProject)} disabled={loading}>
           {loading ? <span className="spin"/> : "↻"} Refresh
         </button>
       </div>
 
-      {/* ── KPI stat cards ── */}
+      {/* ── 6 KPI stat cards (image 5 style) ── */}
       <div style={{
-        display:"grid",
-        gridTemplateColumns:"repeat(auto-fit, minmax(165px, 1fr))",
-        gap:12, marginBottom:20,
+        display:"flex", gap:12, flexWrap:"wrap", marginBottom:20,
       }}>
-        <StatCard label="Active in Pipeline" value={stats.total_active}
-          sub="trays in progress" extraValue={stats.total_active_units}
-          color="#378ADD" icon="⚙"/>
-        <StatCard label="Completed Today" value={stats.completed_today}
-          sub="finished today" extraValue={stats.completed_today_units}
-          color="#3B6D11" icon="✅"/>
-        <StatCard label="FIFO Violations" value={stats.fifo_violated}
-          sub="flagged trays"
-          color={stats.fifo_violated > 0 ? "#E24B4A" : "#3B6D11"} icon="⚠"/>
-        <StatCard label="Stuck / Bottlenecks" value={stats.stuck_count}
-          sub="idle 1h+"
-          color={stats.stuck_count > 0 ? "#BA7517" : "#3B6D11"} icon="🕐"/>
-        <StatCard label="Total Complete" value={stats.total_complete}
-          sub={`${pct}% of all trays`} extraValue={stats.total_complete_units}
-          color="#3B6D11" icon="🏁"/>
+        <StatCard
+          label="Total Trays"
+          main={total}
+          sub1={`${totalUnitsAll.toLocaleString()} units`}
+          color="#378ADD"
+          icon={ICONS.grid}
+        />
+        <StatCard
+          label="Total Units"
+          main={(totalUnitsAll).toLocaleString()}
+          sub1={`${(stats.total_complete_units||0).toLocaleString()} units completed`}
+          color="#7F77DD"
+          icon={ICONS.units}
+        />
+        <StatCard
+          label="Active in Pipeline"
+          main={stats.total_active}
+          sub1={`${(stats.total_active_units||0).toLocaleString()} units in progress`}
+          color="#EF9F27"
+          icon={ICONS.active}
+        />
+        <StatCard
+          label="Done Today"
+          main={stats.completed_today}
+          sub1={`${(stats.completed_today_units||0).toLocaleString()} units out`}
+          color="#3B6D11"
+          icon={ICONS.done}
+        />
+        <StatCard
+          label="FIFO Rate"
+          main={`${fifoRate}%`}
+          sub1={`${stats.fifo_violated||0} violations`}
+          color={fifoRate < 90 ? "#E24B4A" : "#5DCAA5"}
+          icon={ICONS.fifo}
+        />
+        <StatCard
+          label="Total Scans"
+          main={totalScans}
+          sub1="across all trays"
+          color="#D4537E"
+          icon={ICONS.scan}
+        />
       </div>
 
       {/* ── Colorful pipeline stage cards ── */}
       <div style={{
-        background:"#111827", border:"1px solid #1E2D42",
+        background:"#0D1320", border:"1px solid #1E2D42",
         borderRadius:12, padding:16, marginBottom:20,
       }}>
         <div style={{
-          fontSize:11, fontWeight:700, color:"#6B7E95",
-          textTransform:"uppercase", letterSpacing:".06em",
-          marginBottom:14, display:"flex", alignItems:"center", gap:8,
+          fontSize:10, fontWeight:700, color:"#6B7E95",
+          textTransform:"uppercase", letterSpacing:".08em",
+          marginBottom:14, display:"flex", alignItems:"center", gap:10,
         }}>
           Pipeline Stages
           {activeProject && (
-            <span className="tag tag-blue" style={{ textTransform:"none" }}>
+            <span className="tag tag-blue" style={{ textTransform:"none", fontSize:11 }}>
               {activeProject.label}
             </span>
           )}
           <span style={{ flex:1, height:1, background:"#1E2D42" }}/>
+          <span style={{ color:"#6B7E95", fontWeight:400, fontSize:10 }}>
+            {pct}% complete
+          </span>
         </div>
 
-        {/* Scrollable stage cards row */}
-        <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6 }}>
+        <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
           {stages.map((s, i) => (
-            <div key={s.id} style={{ display:"flex", alignItems:"center", gap:8 }}>
-              {i > 0 && (
-                <span style={{ color:"#6B7E95", fontSize:16, flexShrink:0 }}>›</span>
-              )}
+            <div key={s.id} style={{ display:"flex", alignItems:"center", gap:6 }}>
+              {i > 0 && <span style={{ color:"#6B7E95", fontSize:14, flexShrink:0 }}>›</span>}
               <StageCard
                 stage={s}
-                count={stats.stage_counts?.[s.id] || 0}
-                units={stats.stage_units?.[s.id]  || 0}
+                count={stats.stage_counts?.[s.id]||0}
+                units={stats.stage_units?.[s.id]||0}
                 totalTrays={total}
               />
             </div>
           ))}
         </div>
 
-        {/* Throughput bar */}
-        <div style={{ marginTop:16 }}>
-          <div style={{ display:"flex", justifyContent:"space-between",
-                        fontSize:12, marginBottom:6, color:"#6B7E95" }}>
-            <span>Overall throughput</span>
-            <span>
-              <span style={{ fontWeight:700, color:"#E8EFF8" }}>{pct}%</span>
-              {(stats.total_complete_units||0) > 0 && (
-                <span style={{ marginLeft:10, color:"#3B6D11", fontWeight:600 }}>
-                  · {stats.total_complete_units.toLocaleString()} units completed
-                </span>
-              )}
-            </span>
-          </div>
-          <div style={{ height:6, background:"#1E2D42", borderRadius:3, overflow:"hidden" }}>
+        <div style={{ marginTop:14 }}>
+          <div style={{ height:4, background:"#1E2D42", borderRadius:3, overflow:"hidden" }}>
             <div style={{
               height:"100%", width:pct+"%",
               background:"linear-gradient(90deg,#27500A,#5DCAA5)",
               borderRadius:3, transition:"width .5s",
             }}/>
           </div>
+          <div style={{
+            display:"flex", justifyContent:"space-between",
+            fontSize:10, color:"#6B7E95", marginTop:5,
+          }}>
+            <span>0%</span>
+            <span style={{ color:"#3B6D11", fontWeight:700 }}>
+              {(stats.total_complete_units||0).toLocaleString()} units completed
+            </span>
+            <span>100%</span>
+          </div>
         </div>
       </div>
 
-      {/* ── Charts 2×2 grid ── */}
+      {/* ── Charts 2×2 ── */}
       <div style={{
         display:"grid",
         gridTemplateColumns:"repeat(auto-fit, minmax(260px,1fr))",
-        gap:16, marginBottom:20,
+        gap:14, marginBottom:20,
       }}>
-        {/* 1. Donut — stage distribution */}
-        <ChartCard title="Stage Distribution">
+        {/* Donut */}
+        <ChartCard
+          title="Stage Distribution"
+          expandContent={
+            <div style={{ display:"flex", gap:24, flexWrap:"wrap", alignItems:"flex-start" }}>
+              <DonutChart data={donutData} size={200}/>
+              <div style={{ flex:1, minWidth:160 }}>
+                {donutData.map((d, i) => (
+                  <div key={i} style={{
+                    display:"flex", alignItems:"center", gap:10,
+                    marginBottom:10, fontSize:13,
+                  }}>
+                    <div style={{ width:10, height:10, borderRadius:"50%",
+                                  background:d.color, flexShrink:0 }}/>
+                    <span style={{ color:"#6B7E95", flex:1 }}>{d.name}</span>
+                    <span style={{ color:"#E8EFF8", fontWeight:700 }}>{d.value} trays</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          }
+        >
           {donutData.length === 0 ? (
             <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>
               No active trays
             </div>
           ) : (
-            <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
-              <DonutChart data={donutData} size={130}/>
-              <div style={{ flex:1, minWidth:100 }}>
-                {donutData.map((d, i) => (
+            <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+              <DonutChart data={donutData} size={110}/>
+              <div style={{ flex:1, minWidth:80 }}>
+                {donutData.slice(0,5).map((d, i) => (
                   <div key={i} style={{
-                    display:"flex", alignItems:"center", gap:7,
-                    marginBottom:5, fontSize:11,
+                    display:"flex", alignItems:"center", gap:7, marginBottom:5,
                   }}>
-                    <div style={{
-                      width:8, height:8, borderRadius:"50%",
-                      background:d.color, flexShrink:0,
-                    }}/>
-                    <span style={{ color:"#6B7E95", flex:1, overflow:"hidden",
-                                   textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    <div style={{ width:7, height:7, borderRadius:"50%",
+                                  background:d.color, flexShrink:0 }}/>
+                    <span style={{
+                      fontSize:10, color:"#6B7E95", flex:1,
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    }}>
                       {d.name}
                     </span>
-                    <span style={{ color:"#E8EFF8", fontWeight:700 }}>{d.value}</span>
+                    <span style={{ fontSize:10, color:"#E8EFF8", fontWeight:700 }}>
+                      {d.value}
+                    </span>
                   </div>
                 ))}
+                {donutData.length > 5 && (
+                  <div style={{ fontSize:9, color:"#6B7E95", marginTop:4 }}>
+                    +{donutData.length-5} more — expand to see all
+                  </div>
+                )}
               </div>
             </div>
           )}
         </ChartCard>
 
-        {/* 2. Daily scan activity */}
-        <ChartCard title="Daily Scan Activity (7 days)">
-          {dailyData.every(d => d.scans === 0) ? (
+        {/* Daily scan activity */}
+        <ChartCard
+          title="Daily Scan Activity (7 days)"
+          expandContent={
+            <BarChart
+              data={dailyData} valueKey="scans" labelKey="date"
+              colors={dailyData.map((_,i) => i===dailyData.length-1?"#5DCAA5":"#378ADD")}
+              height={220}
+            />
+          }
+        >
+          {dailyData.every(d => d.scans===0) ? (
             <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>
               No scan data yet
             </div>
           ) : (
             <BarChart
               data={dailyData} valueKey="scans" labelKey="date"
-              colors={dailyData.map((_, i) =>
-                i === dailyData.length - 1 ? "#5DCAA5" : "#378ADD"
-              )}
-              height={140}
+              colors={dailyData.map((_,i) => i===dailyData.length-1?"#5DCAA5":"#378ADD")}
+              height={130}
             />
           )}
         </ChartCard>
 
-        {/* 3. Trays by shift */}
-        <ChartCard title="Trays by Shift">
-          {shiftData.every(d => d.count === 0) ? (
+        {/* Trays by shift */}
+        <ChartCard
+          title="Trays by Shift"
+          expandContent={
+            <BarChart
+              data={shiftData} valueKey="count" labelKey="shift"
+              colors={["#378ADD","#EF9F27","#7F77DD"]}
+              height={220}
+            />
+          }
+        >
+          {shiftData.every(d => d.count===0) ? (
             <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>
               No data yet
             </div>
@@ -574,13 +809,21 @@ export default function Dashboard() {
             <BarChart
               data={shiftData} valueKey="count" labelKey="shift"
               colors={["#378ADD","#EF9F27","#7F77DD"]}
-              height={140}
+              height={130}
             />
           )}
         </ChartCard>
 
-        {/* 4. Units by project */}
-        <ChartCard title="Units by Project">
+        {/* Units by project */}
+        <ChartCard
+          title="Units by Project"
+          expandContent={
+            <BarChart
+              data={projData} valueKey="units" labelKey="project"
+              colors={CHART_COLORS} height={220}
+            />
+          }
+        >
           {projData.length === 0 ? (
             <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>
               No data yet
@@ -588,8 +831,7 @@ export default function Dashboard() {
           ) : (
             <BarChart
               data={projData} valueKey="units" labelKey="project"
-              colors={CHART_COLORS}
-              height={140}
+              colors={CHART_COLORS} height={130}
             />
           )}
         </ChartCard>
@@ -614,22 +856,46 @@ export default function Dashboard() {
             : "No active trays in the pipeline."}
         </div>
       ) : (
-        stages
-          .filter(s => byStage[s.id])
-          .map(s => (
-            <StageGroup key={s.id} stage={s} trays={byStage[s.id]}/>
-          ))
+        stages.map(s => {
+          // BAT_MOUNT: merge its own trays + BAT_SOL_R + BAT_SOL_M
+          if (s.id === "BAT_MOUNT") {
+            const merged = batMountDisplay;
+            if (merged.length === 0) return null;
+            return (
+              <StageGroup
+                key={s.id}
+                stage={{ ...s, label:"Battery Mounted + Soldering" }}
+                trays={merged}
+                stageCounts={stats.stage_counts}
+                stageUnits={stats.stage_units}
+              />
+            );
+          }
+          // Skip BAT_SOL_R and BAT_SOL_M as standalone rows (shown inside BAT_MOUNT)
+          if (s.id === "BAT_SOL_R" || s.id === "BAT_SOL_M") return null;
+
+          if (!byStage[s.id]) return null;
+          return (
+            <StageGroup
+              key={s.id}
+              stage={s}
+              trays={byStage[s.id]}
+              stageCounts={stats.stage_counts}
+              stageUnits={stats.stage_units}
+            />
+          );
+        })
       )}
     </div>
   );
 }
 
-function pill(active) {
+function pill(active, color) {
   return {
-    padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight:600,
-    cursor:"pointer", border:"1px solid", fontFamily:"inherit", transition:"all .15s",
-    background:  active ? "rgba(55,138,221,.15)" : "#111827",
-    borderColor: active ? "#378ADD" : "#1E2D42",
-    color:       active ? "#378ADD" : "#6B7E95",
+    padding:"4px 14px", borderRadius:20, fontSize:12, fontWeight:600,
+    cursor:"pointer", border:"1px solid", fontFamily:"inherit",
+    background:  active ? color+"22" : "transparent",
+    borderColor: active ? color      : "#1E2D42",
+    color:       active ? color      : "#6B7E95",
   };
 }
