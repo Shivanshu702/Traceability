@@ -45,7 +45,7 @@ TOKEN_TTL  = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
 security   = HTTPBearer()
 
 # ── When True anyone can call /register; set False in production ──────────────
-OPEN_REGISTRATION = os.getenv("OPEN_REGISTRATION", "true").lower() != "false"
+OPEN_REGISTRATION = os.getenv("OPEN_REGISTRATION", "false").lower() != "false"
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
