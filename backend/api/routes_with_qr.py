@@ -45,7 +45,7 @@ TOKEN_TTL  = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
 security   = HTTPBearer()
 
 # ── When True anyone can call /register; set False in production ──────────────
-OPEN_REGISTRATION = os.getenv("OPEN_REGISTRATION", "false").lower() != "false"
+OPEN_REGISTRATION = os.getenv("OPEN_REGISTRATION", "true").lower() != "false"
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -614,7 +614,7 @@ def list_users(
     tid   = tenant(user)
     users = db.query(User).filter(User.tenant_id == tid).all()
     return [
-        {"username": u.username, "role": u.role, "id": u.id}
+        {"id": u.id, "username": u.username, "role": u.role}
         for u in users
     ]
 
@@ -625,24 +625,18 @@ def admin_create_user(
     user:    dict    = Depends(require_admin),
     db:      Session = Depends(get_db),
 ):
-    """Admin creates a user in the same tenant."""
+    """Admin creates a user in the same tenant. Role can be any string."""
     tid  = tenant(user)
     name = (payload.get("username") or "").strip()
     pw   = payload.get("password") or ""
-    role = payload.get("role", "operator")
+    role = (payload.get("role") or "operator").strip()
 
     if not name or not pw:
         raise HTTPException(400, "username and password required")
-
     if db.query(User).filter(User.tenant_id == tid, User.username == name).first():
         return {"error": "User already exists"}
 
-    new_user = User(
-        tenant_id = tid,
-        username  = name,
-        password  = hash_password(pw),
-        role      = role,
-    )
+    new_user = User(tenant_id=tid, username=name, password=hash_password(pw), role=role)
     db.add(new_user)
     log_action(db, user["sub"], "ADMIN_CREATE_USER", f"target={name} role={role}", tid)
     db.commit()
@@ -656,10 +650,11 @@ def change_user_role(
     user:    dict    = Depends(require_admin),
     db:      Session = Depends(get_db),
 ):
+    """Change any user's role. Role can be any custom string."""
     tid      = tenant(user)
-    new_role = payload.get("role", "operator")
-    if new_role not in ("admin", "operator"):
-        raise HTTPException(400, "role must be 'admin' or 'operator'")
+    new_role = (payload.get("role") or "operator").strip()
+    if not new_role:
+        raise HTTPException(400, "role cannot be empty")
 
     target = db.query(User).filter(
         User.tenant_id == tid, User.username == target_username
@@ -674,15 +669,41 @@ def change_user_role(
     return {"ok": True, "username": target_username, "role": new_role}
 
 
+@router.put("/admin/users/{target_username}/password")
+def admin_reset_password(
+    target_username: str,
+    payload: dict,
+    user:    dict    = Depends(require_admin),
+    db:      Session = Depends(get_db),
+):
+    """Admin resets any user's password (including their own)."""
+    tid     = tenant(user)
+    new_pw  = payload.get("password") or ""
+    if len(new_pw) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
+    target = db.query(User).filter(
+        User.tenant_id == tid, User.username == target_username
+    ).first()
+    if not target:
+        raise HTTPException(404, "User not found")
+
+    target.password = hash_password(new_pw)
+    log_action(db, user["sub"], "RESET_PASSWORD", f"target={target_username}", tid)
+    db.commit()
+    return {"ok": True}
+
+
 @router.delete("/admin/users/{target_username}")
 def delete_user(
     target_username: str,
     user:    dict    = Depends(require_admin),
     db:      Session = Depends(get_db),
 ):
+    """Delete any user including admins. Cannot delete yourself."""
     tid = tenant(user)
     if target_username == user["sub"]:
-        raise HTTPException(400, "Cannot delete yourself")
+        raise HTTPException(400, "Cannot delete yourself — ask another admin")
 
     target = db.query(User).filter(
         User.tenant_id == tid, User.username == target_username
@@ -692,6 +713,126 @@ def delete_user(
 
     db.delete(target)
     log_action(db, user["sub"], "DELETE_USER", target_username, tid)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Role config (admin) ───────────────────────────────────────────────────────
+
+FEATURES = [
+    {"key": "dashboard",       "label": "Dashboard"},
+    {"key": "scan",            "label": "Scan Trays"},
+    {"key": "history",         "label": "Scan History"},
+    {"key": "create_trays",    "label": "Create Trays"},
+    {"key": "manage_trays",    "label": "Manage / Delete Trays"},
+    {"key": "alerts",          "label": "Alerts Dashboard"},
+    {"key": "admin",           "label": "Admin Panel"},
+    {"key": "export",          "label": "Export Data"},
+    {"key": "audit_log",       "label": "Audit Log"},
+    {"key": "pipeline_config", "label": "Pipeline Config"},
+    {"key": "email_settings",  "label": "Email Settings"},
+    {"key": "user_management", "label": "User Management"},
+]
+
+
+@router.get("/admin/features")
+def get_features(user: dict = Depends(require_admin)):
+    return {"features": FEATURES}
+
+
+@router.get("/admin/roles")
+def list_roles(
+    user: dict    = Depends(require_admin),
+    db:   Session = Depends(get_db),
+):
+    import json as _json
+    from models import RoleConfig
+    tid   = tenant(user)
+    roles = db.query(RoleConfig).filter(RoleConfig.tenant_id == tid).all()
+    return [
+        {
+            "id":          r.id,
+            "name":        r.name,
+            "label":       r.label,
+            "permissions": _json.loads(r.permissions or "[]"),
+        }
+        for r in roles
+    ]
+
+
+@router.post("/admin/roles")
+def create_role(
+    payload: dict,
+    user:    dict    = Depends(require_admin),
+    db:      Session = Depends(get_db),
+):
+    import json as _json
+    from models import RoleConfig
+    tid   = tenant(user)
+    name  = (payload.get("name") or "").strip().lower().replace(" ", "_")
+    label = (payload.get("label") or name).strip()
+    perms = payload.get("permissions") or []
+
+    if not name:
+        raise HTTPException(400, "Role name required")
+
+    existing = db.query(RoleConfig).filter(
+        RoleConfig.tenant_id == tid, RoleConfig.name == name
+    ).first()
+    if existing:
+        return {"error": "Role already exists"}
+
+    role = RoleConfig(
+        tenant_id   = tid,
+        name        = name,
+        label       = label,
+        permissions = _json.dumps(perms),
+    )
+    db.add(role)
+    log_action(db, user["sub"], "CREATE_ROLE", f"name={name}", tid)
+    db.commit()
+    return {"ok": True, "name": name, "label": label, "permissions": perms}
+
+
+@router.put("/admin/roles/{role_name}")
+def update_role(
+    role_name: str,
+    payload:   dict,
+    user:      dict    = Depends(require_admin),
+    db:        Session = Depends(get_db),
+):
+    import json as _json
+    from models import RoleConfig
+    tid  = tenant(user)
+    role = db.query(RoleConfig).filter(
+        RoleConfig.tenant_id == tid, RoleConfig.name == role_name
+    ).first()
+    if not role:
+        raise HTTPException(404, "Role not found")
+
+    role.label       = (payload.get("label") or role.label).strip()
+    role.permissions = _json.dumps(payload.get("permissions") or [])
+    role.updated_at  = datetime.utcnow()
+    log_action(db, user["sub"], "UPDATE_ROLE", f"name={role_name}", tid)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/admin/roles/{role_name}")
+def delete_role(
+    role_name: str,
+    user:      dict    = Depends(require_admin),
+    db:        Session = Depends(get_db),
+):
+    from models import RoleConfig
+    tid  = tenant(user)
+    role = db.query(RoleConfig).filter(
+        RoleConfig.tenant_id == tid, RoleConfig.name == role_name
+    ).first()
+    if not role:
+        raise HTTPException(404, "Role not found")
+    db.delete(role)
+    log_action(db, user["sub"], "DELETE_ROLE", role_name, tid)
     db.commit()
     return {"ok": True}
 

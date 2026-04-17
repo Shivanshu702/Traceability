@@ -75,7 +75,16 @@ class PipelineConfig(Base):
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 
-class EmailSettings(Base):
+class RoleConfig(Base):
+    """Custom roles with feature permissions, one per role name per tenant."""
+    __tablename__ = "role_configs"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    tenant_id   = Column(String, index=True, nullable=False)
+    name        = Column(String, nullable=False)          # e.g. "supervisor"
+    label       = Column(String, default="")              # display name
+    permissions = Column(Text, default="[]")              # JSON list of feature keys
+    updated_at  = Column(DateTime, default=datetime.utcnow)
     """SMTP + notification preferences, one row per tenant."""
     __tablename__ = "email_settings"
 
