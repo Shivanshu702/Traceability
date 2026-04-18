@@ -1027,25 +1027,30 @@ def forgot_password(payload: dict, db: Session = Depends(get_db)):
     return {"ok": True, "message": "Password updated. You can now log in."}
 
 
-# ── Developer panel (protected by DEV_KEY header) ─────────────────────────────
+# ── Developer panel (protected by DEV_KEY) ────────────────────────────────────
 # Set  DEV_KEY=your-secret-dev-key  in Render environment.
-# Frontend passes it as:  X-Dev-Key: your-secret-dev-key
+# Key is passed in the JSON body as { "dev_key": "..." } to avoid CORS header issues.
 
-def require_dev_key(x_dev_key: str = None):
-    from fastapi import Header
-    return x_dev_key
+def _check_dev_key(payload_key: str) -> None:
+    """Raise 403 if key is missing or doesn't match DEV_KEY env var."""
+    dev_key = os.getenv("DEV_KEY", "").strip()
+    if not dev_key:
+        raise HTTPException(403, "DEV_KEY is not configured on this server. Add it in Render → Environment.")
+    if not payload_key or payload_key.strip() != dev_key:
+        raise HTTPException(403, "Invalid developer key.")
 
 
-@router.get("/dev/users")
-def dev_list_users(
-    x_dev_key: str = None,
-    db: Session = Depends(get_db),
-):
-    """List ALL users across ALL tenants. Requires DEV_KEY header."""
-    dev_key = os.getenv("DEV_KEY", "")
-    if not dev_key or x_dev_key != dev_key:
-        raise HTTPException(403, "Invalid or missing developer key")
+@router.post("/dev/auth")
+def dev_auth(payload: dict):
+    """Verify dev key without exposing whether it's set. Returns ok: true on success."""
+    _check_dev_key(payload.get("dev_key", ""))
+    return {"ok": True}
 
+
+@router.post("/dev/users")
+def dev_list_users(payload: dict, db: Session = Depends(get_db)):
+    """List ALL users across ALL tenants."""
+    _check_dev_key(payload.get("dev_key", ""))
     users = db.query(User).order_by(User.tenant_id, User.username).all()
     return [
         {"id": u.id, "tenant_id": u.tenant_id, "username": u.username, "role": u.role}
@@ -1053,96 +1058,60 @@ def dev_list_users(
     ]
 
 
-@router.put("/dev/users/{user_id}/role")
-def dev_change_role(
-    user_id: int,
-    payload: dict,
-    x_dev_key: str = None,
-    db: Session = Depends(get_db),
-):
-    """Change any user's role by DB id. Requires DEV_KEY header."""
-    dev_key = os.getenv("DEV_KEY", "")
-    if not dev_key or x_dev_key != dev_key:
-        raise HTTPException(403, "Invalid or missing developer key")
-
+@router.post("/dev/users/{user_id}/role")
+def dev_change_role(user_id: int, payload: dict, db: Session = Depends(get_db)):
+    """Change any user's role by DB id."""
+    _check_dev_key(payload.get("dev_key", ""))
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-
     new_role = (payload.get("role") or "operator").strip()
     user.role = new_role
     db.commit()
     return {"ok": True, "id": user_id, "username": user.username, "role": new_role}
 
 
-@router.put("/dev/users/{user_id}/password")
-def dev_reset_password(
-    user_id: int,
-    payload: dict,
-    x_dev_key: str = None,
-    db: Session = Depends(get_db),
-):
-    """Reset any user's password by DB id. Requires DEV_KEY header."""
-    dev_key = os.getenv("DEV_KEY", "")
-    if not dev_key or x_dev_key != dev_key:
-        raise HTTPException(403, "Invalid or missing developer key")
-
+@router.post("/dev/users/{user_id}/password")
+def dev_reset_password(user_id: int, payload: dict, db: Session = Depends(get_db)):
+    """Reset any user's password by DB id."""
+    _check_dev_key(payload.get("dev_key", ""))
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-
     new_pw = payload.get("password") or ""
     if len(new_pw) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
-
     user.password = hash_password(new_pw)
     db.commit()
     return {"ok": True, "id": user_id, "username": user.username}
 
 
-@router.delete("/dev/users/{user_id}")
-def dev_delete_user(
-    user_id: int,
-    x_dev_key: str = None,
-    db: Session = Depends(get_db),
-):
-    """Delete any user by DB id. Requires DEV_KEY header."""
-    dev_key = os.getenv("DEV_KEY", "")
-    if not dev_key or x_dev_key != dev_key:
-        raise HTTPException(403, "Invalid or missing developer key")
-
+@router.post("/dev/users/{user_id}/delete")
+def dev_delete_user(user_id: int, payload: dict, db: Session = Depends(get_db)):
+    """Delete any user by DB id."""
+    _check_dev_key(payload.get("dev_key", ""))
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-
     db.delete(user)
     db.commit()
     return {"ok": True}
 
 
-@router.get("/dev/tenants")
-def dev_list_tenants(
-    x_dev_key: str = None,
-    db: Session = Depends(get_db),
-):
-    """List all tenants with user counts. Requires DEV_KEY header."""
-    dev_key = os.getenv("DEV_KEY", "")
-    if not dev_key or x_dev_key != dev_key:
-        raise HTTPException(403, "Invalid or missing developer key")
-
+@router.post("/dev/tenants")
+def dev_list_tenants(payload: dict, db: Session = Depends(get_db)):
+    """List all tenants with user and tray counts."""
+    _check_dev_key(payload.get("dev_key", ""))
     from sqlalchemy import func
     rows = (
         db.query(User.tenant_id, func.count(User.id).label("user_count"))
-        .group_by(User.tenant_id)
-        .all()
+        .group_by(User.tenant_id).all()
     )
     tray_rows = (
         db.query(Tray.tenant_id, func.count(Tray.id).label("tray_count"))
-        .group_by(Tray.tenant_id)
-        .all()
+        .group_by(Tray.tenant_id).all()
     )
     tray_map = {r.tenant_id: r.tray_count for r in tray_rows}
-
     return [
         {
             "tenant_id":  r.tenant_id,
