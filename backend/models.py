@@ -33,11 +33,11 @@ class Tray(Base):
 class ScanEvent(Base):
     __tablename__ = "scan_events"
 
-    id          = Column(String, primary_key=True)       # UUID string
+    id          = Column(String, primary_key=True)
     tenant_id   = Column(String, default="default", index=True, nullable=False)
     tray_id     = Column(String, index=True)
     from_stage  = Column(String, default="")
-    stage       = Column(String)                         # to_stage
+    stage       = Column(String)
     operator    = Column(String, default="SYSTEM")
     fifo_flag   = Column(Boolean, default=False)
     note        = Column(Text, default="")
@@ -49,9 +49,9 @@ class User(Base):
 
     id        = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String, default="default", index=True, nullable=False)
-    username  = Column(String, index=True)               # unique within tenant
+    username  = Column(String, index=True)
     password  = Column(String)
-    role      = Column(String, default="operator")       # "admin" | "operator"
+    role      = Column(String, default="operator")
 
 
 class AuditLog(Base):
@@ -71,8 +71,36 @@ class PipelineConfig(Base):
 
     id         = Column(Integer, primary_key=True, index=True)
     tenant_id  = Column(String, unique=True, index=True, nullable=False)
-    config     = Column(Text, nullable=False)            # JSON string
+    config     = Column(Text, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailSettings(Base):
+    """SMTP + notification preferences, one row per tenant."""
+    __tablename__ = "email_settings"
+
+    id                    = Column(Integer, primary_key=True, index=True)
+    tenant_id             = Column(String, unique=True, index=True, nullable=False)
+
+    # SMTP
+    smtp_host             = Column(String, default="")
+    smtp_port             = Column(Integer, default=587)
+    smtp_user             = Column(String, default="")
+    smtp_password         = Column(String, default="")
+    smtp_use_tls          = Column(Boolean, default=True)
+    from_email            = Column(String, default="")
+
+    # Recipients — comma-separated
+    alert_recipients      = Column(Text, default="")
+
+    # Feature flags
+    stuck_alert_enabled   = Column(Boolean, default=False)
+    stuck_hours           = Column(Integer, default=1)
+    daily_summary_enabled = Column(Boolean, default=False)
+    daily_summary_hour    = Column(Integer, default=8)
+    fifo_alert_enabled    = Column(Boolean, default=True)
+
+    updated_at            = Column(DateTime, default=datetime.utcnow)
 
 
 class RoleConfig(Base):
@@ -81,32 +109,7 @@ class RoleConfig(Base):
 
     id          = Column(Integer, primary_key=True, index=True)
     tenant_id   = Column(String, index=True, nullable=False)
-    name        = Column(String, nullable=False)          # e.g. "supervisor"
-    label       = Column(String, default="")              # display name
-    permissions = Column(Text, default="[]")              # JSON list of feature keys
+    name        = Column(String, nullable=False)
+    label       = Column(String, default="")
+    permissions = Column(Text, default="[]")
     updated_at  = Column(DateTime, default=datetime.utcnow)
-    """SMTP + notification preferences, one row per tenant."""
-    __tablename__ = "email_settings"
-
-    id                     = Column(Integer, primary_key=True, index=True)
-    tenant_id              = Column(String, unique=True, index=True, nullable=False)
-
-    # SMTP
-    smtp_host              = Column(String, default="")
-    smtp_port              = Column(Integer, default=587)
-    smtp_user              = Column(String, default="")
-    smtp_password          = Column(String, default="")
-    smtp_use_tls           = Column(Boolean, default=True)
-    from_email             = Column(String, default="")
-
-    # Recipients — comma-separated list
-    alert_recipients       = Column(Text, default="")
-
-    # Feature flags
-    stuck_alert_enabled    = Column(Boolean, default=False)
-    stuck_hours            = Column(Integer, default=1)
-    daily_summary_enabled  = Column(Boolean, default=False)
-    daily_summary_hour     = Column(Integer, default=8)
-    fifo_alert_enabled     = Column(Boolean, default=True)
-
-    updated_at             = Column(DateTime, default=datetime.utcnow)
