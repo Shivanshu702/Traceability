@@ -9,3 +9,7 @@ psycopg2-binary
 apscheduler
 openpyxl
 resend
+slowapi
+limits
+python-dotenv
+gunicorn
