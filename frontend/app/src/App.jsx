@@ -7,11 +7,21 @@ import AlertDashboard   from "./pages/AlertDashboard";
 import LoginPage        from "./pages/LoginPage";
 import AdminPage        from "./pages/AdminPage";
 import ManageTraysPage  from "./pages/ManageTraysPage";
+import DevPage          from "./pages/DevPage";
 import "./App.css";
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("dashboard");
+
+  // Check if developer panel is requested via ?dev=1 in the URL
+  const params    = new URLSearchParams(window.location.search);
+  const devMode   = params.get("dev") === "1";
+
+  // Show developer panel immediately — no login required, protected by DEV_KEY
+  if (devMode) {
+    return <DevPage />;
+  }
 
   useEffect(() => {
     const token     = localStorage.getItem("token");
@@ -19,9 +29,7 @@ export default function App() {
     const role      = localStorage.getItem("role");
     const tenant_id = localStorage.getItem("tenant_id") || "default";
 
-    const params = new URLSearchParams(window.location.search);
-    const scanId = params.get("scan");
-
+    const scanId = new URLSearchParams(window.location.search).get("scan");
     if (scanId) {
       localStorage.setItem("pendingScan", scanId);
       window.history.replaceState({}, "", window.location.pathname);
@@ -55,7 +63,6 @@ export default function App() {
 
   const isAdmin = user.role === "admin";
 
-  // Nav tabs — Manage Trays is admin-only
   const navTabs = [
     { key: "dashboard", label: "📊 Dashboard" },
     { key: "scan",      label: "📷 Scan" },
@@ -70,11 +77,10 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Header */}
       <header className="hdr">
         <span className="hdr-title">⚙ Traceability System</span>
         <span className="hdr-sub">{user.username}</span>
-        <span className="hdr-sub" style={{ color: "#9CA3AF", fontSize: 11 }}>
+        <span className="hdr-sub" style={{ color:"#9CA3AF", fontSize:11 }}>
           org: {user.tenant_id}
         </span>
         <span className="hdr-sub" style={{
@@ -85,14 +91,13 @@ export default function App() {
         </span>
         <button
           className="btn btn-red"
-          style={{ marginLeft: "auto", padding: "5px 14px", fontSize: 12 }}
+          style={{ marginLeft:"auto", padding:"5px 14px", fontSize:12 }}
           onClick={logout}
         >
           Logout
         </button>
       </header>
 
-      {/* Nav */}
       <nav className="nav">
         {navTabs.map(({ key, label }) => (
           <button
@@ -105,7 +110,6 @@ export default function App() {
         ))}
       </nav>
 
-      {/* Pages */}
       <main className="main">
         {page === "dashboard" && <Dashboard />}
         {page === "scan"      && <ScanPage />}

@@ -982,3 +982,172 @@ def _event_dict(e: ScanEvent) -> dict:
         "note":       e.note,
         "timestamp":  e.timestamp.isoformat() if e.timestamp else None,
     }
+
+
+# ── Forgot password (public — no auth required) ────────────────────────────────
+# Uses ADMIN_RESET_KEY env var as a shared secret.
+# Set this in Render environment:  ADMIN_RESET_KEY=some-long-random-string
+# The admin enters this key on the login page to prove identity, then sets a new password.
+
+@router.post("/forgot-password")
+def forgot_password(payload: dict, db: Session = Depends(get_db)):
+    """
+    Allow a user to reset their password using the ADMIN_RESET_KEY.
+    This is the self-service recovery flow accessible from the login page.
+    No email required — the reset key acts as the second factor.
+    """
+    reset_key = os.getenv("ADMIN_RESET_KEY", "")
+    if not reset_key:
+        return {"error": "Password reset is not configured on this server. Contact the developer."}
+
+    provided_key = (payload.get("reset_key") or "").strip()
+    if not provided_key or provided_key != reset_key:
+        return {"error": "Invalid reset key. Contact your system administrator."}
+
+    username  = (payload.get("username") or "").strip()
+    tenant_id = (payload.get("tenant_id") or "default").strip()
+    new_pw    = payload.get("new_password") or ""
+
+    if not username:
+        return {"error": "Username is required."}
+    if len(new_pw) < 6:
+        return {"error": "New password must be at least 6 characters."}
+
+    user = db.query(User).filter(
+        User.tenant_id == tenant_id, User.username == username
+    ).first()
+
+    if not user:
+        # Don't reveal whether user exists — return same message
+        return {"error": "Invalid username or organisation ID."}
+
+    user.password = hash_password(new_pw)
+    log_action(db, username, "FORGOT_PASSWORD_RESET", f"tenant={tenant_id}", tenant_id)
+    db.commit()
+    return {"ok": True, "message": "Password updated. You can now log in."}
+
+
+# ── Developer panel (protected by DEV_KEY header) ─────────────────────────────
+# Set  DEV_KEY=your-secret-dev-key  in Render environment.
+# Frontend passes it as:  X-Dev-Key: your-secret-dev-key
+
+def require_dev_key(x_dev_key: str = None):
+    from fastapi import Header
+    return x_dev_key
+
+
+@router.get("/dev/users")
+def dev_list_users(
+    x_dev_key: str = None,
+    db: Session = Depends(get_db),
+):
+    """List ALL users across ALL tenants. Requires DEV_KEY header."""
+    dev_key = os.getenv("DEV_KEY", "")
+    if not dev_key or x_dev_key != dev_key:
+        raise HTTPException(403, "Invalid or missing developer key")
+
+    users = db.query(User).order_by(User.tenant_id, User.username).all()
+    return [
+        {"id": u.id, "tenant_id": u.tenant_id, "username": u.username, "role": u.role}
+        for u in users
+    ]
+
+
+@router.put("/dev/users/{user_id}/role")
+def dev_change_role(
+    user_id: int,
+    payload: dict,
+    x_dev_key: str = None,
+    db: Session = Depends(get_db),
+):
+    """Change any user's role by DB id. Requires DEV_KEY header."""
+    dev_key = os.getenv("DEV_KEY", "")
+    if not dev_key or x_dev_key != dev_key:
+        raise HTTPException(403, "Invalid or missing developer key")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    new_role = (payload.get("role") or "operator").strip()
+    user.role = new_role
+    db.commit()
+    return {"ok": True, "id": user_id, "username": user.username, "role": new_role}
+
+
+@router.put("/dev/users/{user_id}/password")
+def dev_reset_password(
+    user_id: int,
+    payload: dict,
+    x_dev_key: str = None,
+    db: Session = Depends(get_db),
+):
+    """Reset any user's password by DB id. Requires DEV_KEY header."""
+    dev_key = os.getenv("DEV_KEY", "")
+    if not dev_key or x_dev_key != dev_key:
+        raise HTTPException(403, "Invalid or missing developer key")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    new_pw = payload.get("password") or ""
+    if len(new_pw) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
+    user.password = hash_password(new_pw)
+    db.commit()
+    return {"ok": True, "id": user_id, "username": user.username}
+
+
+@router.delete("/dev/users/{user_id}")
+def dev_delete_user(
+    user_id: int,
+    x_dev_key: str = None,
+    db: Session = Depends(get_db),
+):
+    """Delete any user by DB id. Requires DEV_KEY header."""
+    dev_key = os.getenv("DEV_KEY", "")
+    if not dev_key or x_dev_key != dev_key:
+        raise HTTPException(403, "Invalid or missing developer key")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    db.delete(user)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/dev/tenants")
+def dev_list_tenants(
+    x_dev_key: str = None,
+    db: Session = Depends(get_db),
+):
+    """List all tenants with user counts. Requires DEV_KEY header."""
+    dev_key = os.getenv("DEV_KEY", "")
+    if not dev_key or x_dev_key != dev_key:
+        raise HTTPException(403, "Invalid or missing developer key")
+
+    from sqlalchemy import func
+    rows = (
+        db.query(User.tenant_id, func.count(User.id).label("user_count"))
+        .group_by(User.tenant_id)
+        .all()
+    )
+    tray_rows = (
+        db.query(Tray.tenant_id, func.count(Tray.id).label("tray_count"))
+        .group_by(Tray.tenant_id)
+        .all()
+    )
+    tray_map = {r.tenant_id: r.tray_count for r in tray_rows}
+
+    return [
+        {
+            "tenant_id":  r.tenant_id,
+            "user_count": r.user_count,
+            "tray_count": tray_map.get(r.tenant_id, 0),
+        }
+        for r in rows
+    ]
