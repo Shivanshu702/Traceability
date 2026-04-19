@@ -1,15 +1,36 @@
+# Core framework
 fastapi
 uvicorn[standard]
+gunicorn
+
+# Database
 sqlalchemy
+psycopg2-binary
+alembic                     # database migrations (new)
+
+# Auth / security
 python-jose[cryptography]
 bcrypt
 python-multipart
+
+# Validation (Pydantic v2 ships with FastAPI >= 0.100)
+pydantic>=2.0
+
+# QR codes
 qrcode[pil]
-psycopg2-binary
-apscheduler
+
+# Scheduler — [sqlalchemy] extra adds the persistent job store
+apscheduler[sqlalchemy]
+
+# Exports
 openpyxl
+
+# Email
 resend
+
+# Rate limiting
 slowapi
 limits
+
+# Config
 python-dotenv
-gunicorn

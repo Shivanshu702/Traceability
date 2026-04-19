@@ -2,11 +2,12 @@
 tray_service.py
 ───────────────
 Core tray advancement logic.
-Key changes vs original:
-  • Uses dynamic pipeline config (per-tenant, per-project)
-  • Row-level locking handled by caller (SELECT FOR UPDATE before passing tray in)
-  • Returns human-readable scan_note in every response
-  • Split and branch behaviour driven by config, not hardcoded constants
+
+Changes in this version:
+  • Sets tray.stage_entered_at on every stage transition so fifo_service
+    can compare genuine arrival times (not last_updated).
+  • Split children also get stage_entered_at = now on creation.
+  • All other logic unchanged.
 """
 from models import Tray
 from services.fifo_service import check_fifo_violation
@@ -19,7 +20,7 @@ from datetime import datetime
 SPLIT_MARKER = "SPLIT"
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+# ── Public entry point ──────────────────────────────────────────────────────
 
 def advance_tray(
     db,
@@ -48,26 +49,26 @@ def advance_tray(
     branch_options = get_branch_options(project_id, config)
     branch_stage   = branch_cfg.get("atStage") if branch_options else None
 
-    # ── Block: parent after split (scan child A/B QRs instead) ───────────────
+    # ── Block: parent after split ───────────────────────────────────────────
     if tray.stage == SPLIT_MARKER:
         return {
             "error": "This tray has been split. Scan Part A or Part B QR codes.",
             "is_split_parent_blocked": True,
         }
 
-    # ── Block: already complete ───────────────────────────────────────────────
+    # ── Block: already complete ─────────────────────────────────────────────
     if tray.stage == "COMPLETE":
         return {"error": f"{tray.id} is already complete.", "already_done": True}
 
-    # ── FIFO check (warn + log, never block) ─────────────────────────────────
+    # ── FIFO check (warn + log, never block) ────────────────────────────────
     fifo     = check_fifo_violation(db, tray)
     fifo_vio = fifo["violation"]
 
-    # ── Intercept split trigger ───────────────────────────────────────────────
+    # ── Intercept split trigger ─────────────────────────────────────────────
     if split_stage and tray.stage == split_stage:
         return _split_tray(db, tray, operator, fifo_vio, fifo["older_trays"], config)
 
-    # ── Branch stage — operator must supply a choice ──────────────────────────
+    # ── Branch stage — operator must supply a choice ────────────────────────
     now = datetime.utcnow()
     if branch_stage and tray.stage == branch_stage:
         valid_ids = [b["id"] for b in branch_options]
@@ -83,10 +84,11 @@ def advance_tray(
     from_stage = tray.stage
     scan_note  = _build_scan_note(from_stage, next_stage_id, config)
 
-    # ── Write new state ───────────────────────────────────────────────────────
-    tray.stage         = next_stage_id
-    tray.last_updated  = now
-    tray.fifo_violated = fifo_vio or tray.fifo_violated
+    # ── Write new state ─────────────────────────────────────────────────────
+    tray.stage            = next_stage_id
+    tray.last_updated     = now
+    tray.stage_entered_at = now          # ← records when tray joined this station queue
+    tray.fifo_violated    = fifo_vio or tray.fifo_violated
 
     if next_stage_id == "COMPLETE":
         tray.is_done      = True
@@ -111,7 +113,7 @@ def advance_tray(
     }
 
 
-# ── Split helper ──────────────────────────────────────────────────────────────
+# ── Split helper ────────────────────────────────────────────────────────────
 
 def _split_tray(
     db, tray: Tray, operator: str,
@@ -123,28 +125,30 @@ def _split_tray(
     now          = datetime.utcnow()
     from_stage   = tray.stage
 
-    tray.is_split_parent = True
-    tray.stage           = SPLIT_MARKER
-    tray.last_updated    = now
-    tray.fifo_violated   = fifo_vio or tray.fifo_violated
+    tray.is_split_parent  = True
+    tray.stage            = SPLIT_MARKER
+    tray.last_updated     = now
+    tray.stage_entered_at = now
+    tray.fifo_violated    = fifo_vio or tray.fifo_violated
 
     half_a = (tray.total_units + 1) // 2
     half_b = tray.total_units - half_a
 
     for part, units in (("A", half_a), ("B", half_b)):
         child = Tray(
-            id            = f"{tray.id}-{part}",
-            tenant_id     = tray.tenant_id,
-            stage         = resume_stage,
-            project       = tray.project,
-            shift         = tray.shift,
-            created_by    = tray.created_by,
-            batch_no      = tray.batch_no,
-            total_units   = units,
-            parent_id     = tray.id,
-            fifo_violated = tray.fifo_violated,
-            created_at    = tray.created_at,
-            last_updated  = now,
+            id               = f"{tray.id}-{part}",
+            tenant_id        = tray.tenant_id,
+            stage            = resume_stage,
+            project          = tray.project,
+            shift            = tray.shift,
+            created_by       = tray.created_by,
+            batch_no         = tray.batch_no,
+            total_units      = units,
+            parent_id        = tray.id,
+            fifo_violated    = tray.fifo_violated,
+            created_at       = tray.created_at,
+            last_updated     = now,
+            stage_entered_at = now,   # child arrives at resume_stage right now
         )
         db.add(child)
         log_scan(
@@ -174,10 +178,9 @@ def _split_tray(
     }
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────────────────────
 
 def _build_scan_note(from_stage: str, to_stage: str, config: dict) -> str:
-    """Return a human-readable note for this transition (mirrors GAS SCAN_ACTIONS)."""
     for s in config.get("stages", []):
         if s["id"] == from_stage:
             note = s.get("scanNote", "")
@@ -195,19 +198,20 @@ def _build_scan_note(from_stage: str, to_stage: str, config: dict) -> str:
 
 def _tray_dict(tray: Tray) -> dict:
     return {
-        "id":              tray.id,
-        "tenant_id":       tray.tenant_id,
-        "stage":           tray.stage,
-        "is_done":         tray.is_done,
-        "is_split_parent": tray.is_split_parent,
-        "parent_id":       tray.parent_id,
-        "project":         tray.project,
-        "shift":           tray.shift,
-        "created_by":      tray.created_by,
-        "batch_no":        tray.batch_no,
-        "total_units":     tray.total_units,
-        "fifo_violated":   tray.fifo_violated,
-        "created_at":      tray.created_at.isoformat() if tray.created_at else None,
-        "last_updated":    tray.last_updated.isoformat() if tray.last_updated else None,
-        "completed_at":    tray.completed_at.isoformat() if tray.completed_at else None,
+        "id":               tray.id,
+        "tenant_id":        tray.tenant_id,
+        "stage":            tray.stage,
+        "is_done":          tray.is_done,
+        "is_split_parent":  tray.is_split_parent,
+        "parent_id":        tray.parent_id,
+        "project":          tray.project,
+        "shift":            tray.shift,
+        "created_by":       tray.created_by,
+        "batch_no":         tray.batch_no,
+        "total_units":      tray.total_units,
+        "fifo_violated":    tray.fifo_violated,
+        "created_at":       tray.created_at.isoformat() if tray.created_at else None,
+        "last_updated":     tray.last_updated.isoformat() if tray.last_updated else None,
+        "stage_entered_at": tray.stage_entered_at.isoformat() if tray.stage_entered_at else None,
+        "completed_at":     tray.completed_at.isoformat() if tray.completed_at else None,
     }

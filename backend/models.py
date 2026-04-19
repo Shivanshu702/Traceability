@@ -29,6 +29,13 @@ class Tray(Base):
     last_updated    = Column(DateTime, default=datetime.utcnow, index=True)
     completed_at    = Column(DateTime, nullable=True)
 
+    # FIX: tracks when this tray entered its CURRENT stage — used for accurate FIFO ordering.
+    # last_updated is refreshed on every scan so it cannot reliably compare arrival order.
+    stage_entered_at = Column(DateTime, default=datetime.utcnow, nullable=True)
+
+    # Stuck-alert dedup: prevents the same tray flooding inboxes every hour.
+    last_stuck_alert_at = Column(DateTime, nullable=True)
+
 
 class ScanEvent(Base):
     __tablename__ = "scan_events"
@@ -52,6 +59,20 @@ class User(Base):
     username  = Column(String, index=True)
     password  = Column(String)
     role      = Column(String, default="operator")
+
+
+class PasswordResetToken(Base):
+    """Single-use, time-limited token for self-service password reset via email."""
+    __tablename__ = "password_reset_tokens"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    tenant_id  = Column(String, index=True, nullable=False)
+    username   = Column(String, index=True, nullable=False)
+    # Store only the hash — never the raw token.
+    token_hash = Column(String, nullable=False, unique=True)
+    expires_at = Column(DateTime, nullable=False)
+    used       = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class AuditLog(Base):

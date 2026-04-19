@@ -2,12 +2,18 @@
 api/tray_routes.py
 ──────────────────
 Tray creation, scanning, history, and QR code endpoints.
+
+Changes:
+  • GET /trays now supports limit / offset pagination (was unbounded)
+  • POST /trays/create, /scan, /scan/bulk, /trays/bulk-delete use Pydantic models
+    instead of raw dict — gives proper validation + OpenAPI docs
 """
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Tray, ScanEvent
+from schemas import TraysCreateIn, ScanIn, BulkScanIn, BulkDeleteIn
 from core.auth import get_current_user, require_admin, tenant
 from core.rate_limit import limiter, SCAN_LIMIT
 from services.tray_service import advance_tray, _tray_dict
@@ -19,6 +25,9 @@ from datetime import datetime
 from typing import Optional
 
 router = APIRouter(tags=["trays"])
+
+# Maximum rows returned per page — prevents accidental full-table dumps.
+_MAX_PAGE_SIZE = 500
 
 
 def _event_dict(e: ScanEvent) -> dict:
@@ -40,53 +49,72 @@ def _event_dict(e: ScanEvent) -> dict:
 def get_all_trays(
     stage:   Optional[str] = None,
     project: Optional[str] = None,
+    # Pagination — defaults to first 200 rows; max 500 per page.
+    limit:   int           = Query(default=200, ge=1, le=_MAX_PAGE_SIZE),
+    offset:  int           = Query(default=0,   ge=0),
     user:    dict          = Depends(get_current_user),
     db:      Session       = Depends(get_db),
 ):
+    """
+    Return trays for the authenticated tenant.
+
+    Pagination params:
+      limit  — rows per page (1–500, default 200)
+      offset — rows to skip  (default 0)
+
+    Response includes `total` so the client can calculate page count.
+    """
     tid = tenant(user)
     q   = db.query(Tray).filter(Tray.tenant_id == tid)
     if stage:   q = q.filter(Tray.stage   == stage)
     if project: q = q.filter(Tray.project == project)
-    return [_tray_dict(t) for t in q.order_by(Tray.created_at.desc()).all()]
+
+    total  = q.count()
+    trays  = q.order_by(Tray.created_at.desc()).offset(offset).limit(limit).all()
+
+    return {
+        "total":  total,
+        "limit":  limit,
+        "offset": offset,
+        "trays":  [_tray_dict(t) for t in trays],
+    }
 
 
 @router.post("/trays/create")
 def create_trays(
-    payload: dict,
+    payload: TraysCreateIn,
     user:    dict    = Depends(get_current_user),
     db:      Session = Depends(get_db),
 ):
-    from core.cache import pipeline_cache, stats_cache
+    from core.cache import stats_cache
     tid     = tenant(user)
     cfg     = get_pipeline_config(db, tid)
     created = []
+    now     = datetime.utcnow()
 
-    for t in payload.get("trays", []):
-        tray_id = str(t.get("id", "")).strip().upper()
-        if not tray_id:
-            continue
+    for t in payload.trays:
+        tray_id = t.id   # already uppercased by Pydantic validator
         if db.query(Tray).filter(Tray.tenant_id == tid, Tray.id == tray_id).first():
             continue
 
-        units = t.get("total_units") or get_units_for_project_cfg(t.get("project", ""), cfg)
-        now   = datetime.utcnow()
+        units = t.total_units or get_units_for_project_cfg(t.project or "", cfg)
         tray  = Tray(
-            id           = tray_id,
-            tenant_id    = tid,
-            stage        = "CREATED",
-            project      = t.get("project", ""),
-            shift        = t.get("shift", ""),
-            created_by   = t.get("created_by", user["sub"]),
-            batch_no     = t.get("batch_no", ""),
-            total_units  = units,
-            created_at   = now,
-            last_updated = now,
+            id               = tray_id,
+            tenant_id        = tid,
+            stage            = "CREATED",
+            project          = t.project or "",
+            shift            = t.shift or "",
+            created_by       = t.created_by or user["sub"],
+            batch_no         = t.batch_no or "",
+            total_units      = units,
+            created_at       = now,
+            last_updated     = now,
+            stage_entered_at = now,
         )
         db.add(tray)
         created.append({**_tray_dict(tray), "qr_base64": generate_qr_base64(tray_id)})
 
     db.commit()
-    # Invalidate stats cache for this tenant after creation
     stats_cache.invalidate_prefix(f"stats:{tid}")
     log_action(db, user["sub"], "CREATE_TRAYS", f"count={len(created)}", tid)
     db.commit()
@@ -160,17 +188,16 @@ def delete_tray(
 
 @router.post("/trays/bulk-delete")
 def bulk_delete_trays(
-    payload: dict,
+    payload: BulkDeleteIn,
     user:    dict    = Depends(require_admin),
     db:      Session = Depends(get_db),
 ):
     from core.cache import stats_cache
     tid       = tenant(user)
-    ids       = [str(i).strip().upper() for i in payload.get("ids", [])]
     deleted   = []
     not_found = []
 
-    for tray_id in ids:
+    for tray_id in payload.ids:
         tray = db.query(Tray).filter(
             Tray.tenant_id == tid, Tray.id == tray_id
         ).first()
@@ -198,13 +225,13 @@ def bulk_delete_trays(
 @limiter.limit(SCAN_LIMIT)
 def scan(
     request: Request,
-    payload: dict,
+    payload: ScanIn,
     user:    dict    = Depends(get_current_user),
     db:      Session = Depends(get_db),
 ):
     from core.cache import stats_cache
     tid     = tenant(user)
-    tray_id = str(payload.get("id", "")).strip().upper()
+    tray_id = payload.id
     cfg     = get_pipeline_config(db, tid)
 
     try:
@@ -222,8 +249,8 @@ def scan(
 
     result = advance_tray(
         db, tray,
-        operator            = user["sub"],
-        next_stage_override = payload.get("next_stage_override"),
+        operator            = payload.operator or user["sub"],
+        next_stage_override = payload.next_stage_override,
         config              = cfg,
     )
 
@@ -245,7 +272,7 @@ def scan(
 @limiter.limit(SCAN_LIMIT)
 def bulk_scan(
     request: Request,
-    payload: dict,
+    payload: BulkScanIn,
     user:    dict    = Depends(get_current_user),
     db:      Session = Depends(get_db),
 ):
@@ -254,8 +281,7 @@ def bulk_scan(
     cfg     = get_pipeline_config(db, tid)
     results = []
 
-    for raw_id in payload.get("ids", []):
-        tray_id = str(raw_id).strip().upper()
+    for tray_id in payload.ids:
         try:
             tray = (
                 db.query(Tray)
@@ -269,7 +295,7 @@ def bulk_scan(
         if not tray:
             results.append({"id": tray_id, "error": "Not found"}); continue
 
-        r = advance_tray(db, tray, user["sub"], payload.get("next_stage_override"), cfg)
+        r = advance_tray(db, tray, user["sub"], payload.next_stage_override, cfg)
         db.commit()
         results.append(r)
 
@@ -299,16 +325,20 @@ def get_history(
 
 @router.get("/scan-log")
 def get_scan_log(
-    limit: int       = 200,
-    user:  dict      = Depends(get_current_user),
-    db:    Session   = Depends(get_db),
+    limit:  int     = Query(default=200, ge=1, le=2000),
+    offset: int     = Query(default=0,   ge=0),
+    user:   dict    = Depends(get_current_user),
+    db:     Session = Depends(get_db),
 ):
     tid    = tenant(user)
+    total  = db.query(ScanEvent).filter(ScanEvent.tenant_id == tid).count()
     events = (
         db.query(ScanEvent)
         .filter(ScanEvent.tenant_id == tid)
         .order_by(ScanEvent.timestamp.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )
-    return [_event_dict(e) for e in events]
+    return {"total": total, "limit": limit, "offset": offset,
+            "events": [_event_dict(e) for e in events]}
