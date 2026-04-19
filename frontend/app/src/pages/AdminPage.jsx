@@ -1,3 +1,4 @@
+import PipelineConfigEditor from "./PipelineConfigEditor";
 import { useState, useEffect } from "react";
 import {
   getAdminPipelineConfig, saveAdminPipelineConfig, resetPipelineConfig,
@@ -555,74 +556,9 @@ function EmailTab() {
 }
 
 // ── Pipeline config tab ───────────────────────────────────────────────────────
-function PipelineTab() {
-  const [config,  setConfig]  = useState(null);
-  const [raw,     setRaw]     = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving,  setSaving]  = useState(false);
-  const [msg,     setMsg]     = useState("");
-  const [error,   setError]   = useState("");
-  const [jsonErr, setJsonErr] = useState("");
+// Inside the Pipeline Config tab:
+<PipelineConfigEditor />
 
-  useEffect(() => {
-    getAdminPipelineConfig().then(d => {
-      setConfig(d); setRaw(JSON.stringify(d, null, 2)); setLoading(false);
-    });
-  }, []);
-
-  function handleRawChange(v) {
-    setRaw(v);
-    try { setConfig(JSON.parse(v)); setJsonErr(""); }
-    catch { setJsonErr("Invalid JSON"); }
-  }
-
-  async function save() {
-    if (jsonErr) { setError("Fix JSON errors first"); return; }
-    setSaving(true); setMsg(""); setError("");
-    const res = await saveAdminPipelineConfig(config);
-    setSaving(false);
-    if (res.ok) setMsg("✅ Pipeline config saved");
-    else setError("Failed to save");
-  }
-
-  async function handleReset() {
-    if (!confirm("Reset pipeline to hardcoded defaults?")) return;
-    setSaving(true);
-    const res = await resetPipelineConfig();
-    setConfig(res.config);
-    setRaw(JSON.stringify(res.config, null, 2));
-    setSaving(false);
-    setMsg("✅ Reset to defaults");
-  }
-
-  if (loading) return <Spin />;
-
-  return (
-    <div>
-      <div style={card}>
-        <div style={cardTitle}>Pipeline JSON Config</div>
-        <p style={{ fontSize:12, color:"#6B7E95", marginBottom:12 }}>
-          Edit stages, projects, split and branch settings. Changes apply immediately — no redeploy.
-        </p>
-        {jsonErr && <div style={errBox}>{jsonErr}</div>}
-        <textarea value={raw} onChange={e => handleRawChange(e.target.value)} style={{
-          width:"100%", height:480, background:"#0A0F1A",
-          border:"1px solid #1E2D42", borderRadius:8, color:"#97C459",
-          fontFamily:"Courier New, monospace", fontSize:12, padding:14,
-          lineHeight:1.5, resize:"vertical", outline:"none", boxSizing:"border-box",
-        }}/>
-      </div>
-      {error && <div style={errBox}>{error}</div>}
-      {msg   && <div style={okBox}>{msg}</div>}
-      <div style={{ display:"flex", gap:10, marginTop:4 }}>
-        <button style={btnBlue} onClick={save} disabled={saving || !!jsonErr}>
-          {saving ? "Saving…" : "💾 Save Config"}
-        </button>
-        <button style={btnGray} onClick={handleReset}>↩ Reset to Defaults</button>
-      </div>
-    </div>
-  );
-}
 
 // ── Export tab ────────────────────────────────────────────────────────────────
 function ExportTab() {
