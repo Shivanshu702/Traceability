@@ -41,7 +41,13 @@ export const saveAdminPipelineConfig = (config) => req("PUT",  "/admin/pipeline-
 export const resetPipelineConfig     = ()       => req("POST", "/admin/pipeline-config/reset");
 
 // ── Trays ─────────────────────────────────────────────────────────────────────
-export const getAllTrays     = (params = {}) => req("GET", "/trays?" + new URLSearchParams(params));
+// GET /trays now returns {total, limit, offset, trays:[]}
+// Unwrap so all callers continue to receive a plain array.
+export async function getAllTrays(params = {}) {
+  const data = await req("GET", "/trays?" + new URLSearchParams(params));
+  return Array.isArray(data) ? data : (data.trays ?? []);
+}
+
 export const getTray         = (id)    => req("GET",    `/tray/${id}`);
 export const createTrays     = (trays) => req("POST",   "/trays/create", { trays });
 export const deleteTray      = (id)    => req("DELETE", `/tray/${id}`);
@@ -54,8 +60,14 @@ export const bulkScan = (ids, operator, next_stage_override) =>
   req("POST", "/scan/bulk", { ids, operator, next_stage_override });
 
 // ── History & logs ────────────────────────────────────────────────────────────
-export const getHistory = (trayId)      => req("GET", `/history/${trayId}`);
-export const getScanLog = (limit = 200) => req("GET", `/scan-log?limit=${limit}`);
+export const getHistory = (trayId) => req("GET", `/history/${trayId}`);
+
+// GET /scan-log now returns {total, limit, offset, events:[]}
+// Unwrap so all callers continue to receive a plain array.
+export async function getScanLog(limit = 200) {
+  const data = await req("GET", `/scan-log?limit=${limit}`);
+  return Array.isArray(data) ? data : (data.events ?? []);
+}
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 export const getStats     = (project = null) =>
