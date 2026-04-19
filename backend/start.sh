@@ -1,6 +1,12 @@
 #!/bin/bash
-# Production startup — Gunicorn with multiple Uvicorn workers.
+# Production startup — runs DB migrations then starts Gunicorn.
 # For single-process dev use:  uvicorn main:app --reload --port 8001
+
+set -e   # abort immediately if any command fails
+
+echo "Running database migrations..."
+alembic upgrade head
+echo "Migrations complete."
 
 exec gunicorn main:app \
   --workers 4 \
