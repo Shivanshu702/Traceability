@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { scanTray, getTray } from "../api/api";
+import { scanTray, getTray, getPipeline } from "../api/api";
 import QRScanner from "../components/QRScanner";
 
 export default function ScanPage() {
@@ -14,13 +14,19 @@ export default function ScanPage() {
   const [branch,      setBranch]      = useState(null);
   const [success,     setSuccess]     = useState("");
   const [scanNote,    setScanNote]    = useState("");
+  const [pipeline,    setPipeline]    = useState(null);
 
-  const BRANCH_OPTIONS = [
-    { id: "BAT_SOL_R", label: "Battery Soldered by Robot", icon: "🤖" },
-    { id: "BAT_SOL_M", label: "Battery Soldered by Hand",  icon: "✋" },
-  ];
+  // Load pipeline config so branch options come from the live config, not hardcode
+  useEffect(() => {
+    getPipeline().then(p => setPipeline(p)).catch(() => {});
+  }, []);
 
-  // ── Auto-load tray from localStorage (set by QR scan) ────────────────────
+  // Persistent operator name
+  useEffect(() => {
+    if (operator) localStorage.setItem("lastOperator", operator);
+  }, [operator]);
+
+  // Auto-load tray from QR scan deep-link
   useEffect(() => {
     const pending = localStorage.getItem("pendingScan");
     if (pending) {
@@ -31,10 +37,13 @@ export default function ScanPage() {
     }
   }, []);
 
-  // Persist last operator name across sessions
-  useEffect(() => {
-    if (operator) localStorage.setItem("lastOperator", operator);
-  }, [operator]);
+  // Branch options from live pipeline config (falls back to hardcoded)
+  const BRANCH_OPTIONS = pipeline?.branch?.options || [
+    { id: "BAT_SOL_R", label: "Battery Soldered by Robot", icon: "🤖" },
+    { id: "BAT_SOL_M", label: "Battery Soldered by Hand",  icon: "✋" },
+  ];
+
+  const BRANCH_STAGE = pipeline?.branch?.atStage || "BAT_MOUNT";
 
   async function autoLoad(id) {
     setLoading(true); setError(""); setSuccess(""); setScanNote("");
@@ -49,13 +58,7 @@ export default function ScanPage() {
   async function loadTray() {
     const id = trayId.trim().toUpperCase();
     if (!id) return;
-    setLoading(true); setError(""); setSuccess(""); setScanNote("");
-    try {
-      const data = await getTray(id);
-      if (data.detail || data.error) { setError(data.detail || data.error); setTray(null); }
-      else { setTray(data); setBranch(null); }
-    } catch { setError("Cannot reach server."); }
-    finally { setLoading(false); }
+    await autoLoad(id);
   }
 
   async function doScan(id, override) {
@@ -63,7 +66,6 @@ export default function ScanPage() {
     if (!op) { setError("Please enter your operator name."); return; }
 
     setLoading(true); setError(""); setSuccess(""); setScanNote("");
-
     try {
       const data = await scanTray(
         (id || trayId).trim().toUpperCase(), op, override || undefined
@@ -87,7 +89,6 @@ export default function ScanPage() {
         setSuccess(`✅ Moved to: ${data.to_label || updatedTray.stage}`);
       }
 
-      // Show human-readable scan note (mirrors GAS SCAN_ACTIONS)
       if (data.scan_note) setScanNote(data.scan_note);
 
       if (data.fifo_vio) {
@@ -119,7 +120,7 @@ export default function ScanPage() {
     setSuccess(""); setScanNote(""); setBranch(null);
   }
 
-  const isBranch      = tray && tray.stage === "BAT_MOUNT";
+  const isBranch      = tray && tray.stage === BRANCH_STAGE;
   const isSplitParent = tray && tray.is_split_parent;
   const isDone        = tray && tray.is_done;
 
@@ -127,16 +128,35 @@ export default function ScanPage() {
     <div style={S.container}>
       <h2 style={{ color: "#E8EFF8", marginBottom: 20 }}>📦 Scan Tray</h2>
 
-      {/* Input card */}
+      {/* Operator name — always visible at top for factory floor use */}
+      <div style={{ ...S.card, padding: "12px 16px", marginBottom: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#6B7E95",
+                      textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>
+          Operator name
+        </div>
+        <input
+          style={{ ...S.input, marginBottom: 0,
+                   border: operator ? "1px solid #3B6D1155" : "1px solid #A32D2D55" }}
+          placeholder="Enter your name before scanning"
+          value={operator}
+          onChange={e => setOperator(e.target.value)}
+        />
+        {!operator && (
+          <div style={{ fontSize: 11, color: "#F09595", marginTop: 5 }}>
+            ⚠ Required before scanning
+          </div>
+        )}
+      </div>
+
+      {/* Tray ID input */}
       {!tray && (
         <div style={S.card}>
-          <input style={S.input} placeholder="Tray ID (e.g. TRY-001)"
+          <input
+            style={S.input}
+            placeholder="Tray ID (e.g. TRY-001)"
             value={trayId}
             onChange={e => setTrayId(e.target.value.toUpperCase())}
             onKeyDown={e => e.key === "Enter" && loadTray()}
-          />
-          <input style={S.input} placeholder="Your name (operator)"
-            value={operator} onChange={e => setOperator(e.target.value)}
           />
           <div style={S.buttons}>
             <button style={S.btn} onClick={loadTray}
@@ -144,8 +164,8 @@ export default function ScanPage() {
               {loading ? "…" : "Load"}
             </button>
             <button style={S.btnPrimary} onClick={() => doScan()}
-              disabled={loading || !trayId.trim()}>
-              {loading ? "…" : "Scan"}
+              disabled={loading || !trayId.trim() || !operator.trim()}>
+              {loading ? "…" : "⚡ Scan"}
             </button>
             <button style={S.btnGreen} onClick={() => setShowScanner(true)}>
               📷 Scan QR
@@ -173,11 +193,7 @@ export default function ScanPage() {
 
       {error   && <div style={S.errorBox}>{error}</div>}
       {success && <div style={S.okBox}>{success}</div>}
-
-      {/* Scan note (human-readable action description) */}
-      {scanNote && !error && (
-        <div style={S.noteBox}>ℹ {scanNote}</div>
-      )}
+      {scanNote && !error && <div style={S.noteBox}>ℹ {scanNote}</div>}
 
       {/* Tray card */}
       {tray && !loading && (
@@ -195,6 +211,9 @@ export default function ScanPage() {
             {tray.project && (
               <span style={S.tagBlue}>{tray.project}</span>
             )}
+            {tray.shift && (
+              <span style={S.tagGray}>{tray.shift}</span>
+            )}
           </div>
 
           {/* Stage */}
@@ -207,9 +226,9 @@ export default function ScanPage() {
 
           {/* Info pills */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            {tray.shift    && <span style={S.tagGray}>{tray.shift}</span>}
             {tray.batch_no && <span style={S.tagGray}>Batch: {tray.batch_no}</span>}
             <span style={S.tagGray}>{tray.total_units} units</span>
+            {tray.created_by && <span style={S.tagGray}>Created by: {tray.created_by}</span>}
           </div>
 
           {tray.fifo_violated && (
@@ -228,12 +247,6 @@ export default function ScanPage() {
           {/* Actions */}
           {!isDone && !isSplitParent && (
             <>
-              <input style={{ ...S.input, marginTop: 12 }}
-                placeholder="Your name (operator)"
-                value={operator}
-                onChange={e => setOperator(e.target.value)}
-              />
-
               {/* Branch selection */}
               {isBranch && (
                 <div style={{ marginTop: 10 }}>
@@ -263,7 +276,7 @@ export default function ScanPage() {
                     }}
                     onClick={() => doScan(null, branch)}
                     disabled={!branch || loading}>
-                    {loading ? "Processing…" : "✓ Confirm Branch"}
+                    {loading ? "Processing…" : "✔ Confirm Branch"}
                   </button>
                 </div>
               )}
@@ -274,11 +287,11 @@ export default function ScanPage() {
                   style={{
                     ...S.btnPrimary, width: "100%", marginTop: 12,
                     padding: 14, fontSize: 15,
-                    opacity: loading ? 0.5 : 1,
+                    opacity: (loading || !operator.trim()) ? 0.5 : 1,
                   }}
                   onClick={() => doScan()}
-                  disabled={loading}>
-                  {loading ? "Processing…" : "✓ Confirm Scan"}
+                  disabled={loading || !operator.trim()}>
+                  {loading ? "Processing…" : "✔ Confirm Scan"}
                 </button>
               )}
             </>
@@ -304,43 +317,19 @@ function stageColor(stage) {
 }
 
 const S = {
-  container: { maxWidth: 480, margin: "0 auto", padding: 20,
-               fontFamily: "'Segoe UI', sans-serif" },
-  card:      { background: "#162032", border: "1px solid #1E2D42",
-               borderRadius: 12, padding: 20, marginBottom: 16 },
-  input:     { width: "100%", padding: 12, marginBottom: 12, borderRadius: 8,
-               border: "1px solid #1E2D42", background: "#111827",
-               color: "#E8EFF8", fontSize: 14, boxSizing: "border-box",
-               outline: "none" },
+  container: { maxWidth: 480, margin: "0 auto", padding: 20, fontFamily: "'Segoe UI', sans-serif" },
+  card:      { background: "#162032", border: "1px solid #1E2D42", borderRadius: 12, padding: 20, marginBottom: 16 },
+  input:     { width: "100%", padding: 12, marginBottom: 12, borderRadius: 8, border: "1px solid #1E2D42", background: "#111827", color: "#E8EFF8", fontSize: 14, boxSizing: "border-box", outline: "none", fontFamily: "inherit" },
   buttons:   { display: "flex", gap: 8, flexWrap: "wrap" },
-  btn:       { flex: 1, padding: 10, borderRadius: 8, border: "1px solid #1E2D42",
-               background: "#111827", color: "#E8EFF8", cursor: "pointer",
-               fontSize: 13 },
-  btnPrimary:{ flex: 1, padding: 10, borderRadius: 8, border: "none",
-               background: "#185FA5", color: "#E6F1FB", cursor: "pointer",
-               fontSize: 13, fontWeight: 700 },
-  btnGreen:  { flex: 1, padding: 10, borderRadius: 8, border: "none",
-               background: "#3B6D11", color: "#EAF3DE", cursor: "pointer",
-               fontSize: 13 },
-  errorBox:  { background: "rgba(163,45,45,.2)", border: "1px solid rgba(163,45,45,.5)",
-               borderRadius: 8, padding: 14, color: "#F09595", fontSize: 13,
-               marginBottom: 12 },
-  okBox:     { background: "rgba(59,109,17,.2)", border: "1px solid rgba(59,109,17,.4)",
-               borderRadius: 8, padding: 12, color: "#97C459", fontSize: 13,
-               marginBottom: 12 },
-  noteBox:   { background: "rgba(55,138,221,.08)", border: "1px solid rgba(55,138,221,.25)",
-               borderRadius: 8, padding: 12, color: "#85B7EB", fontSize: 13,
-               marginBottom: 12 },
-  warnBox:   { background: "rgba(186,117,23,.15)", border: "1px solid rgba(186,117,23,.4)",
-               borderRadius: 8, padding: 12, color: "#FAC775", fontSize: 13,
-               marginBottom: 10 },
-  tagAmber:  { background: "rgba(186,117,23,.2)", color: "#FAC775",
-               borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 700 },
-  tagBlue:   { background: "rgba(55,138,221,.15)", color: "#85B7EB",
-               borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 600 },
-  tagGray:   { background: "rgba(136,135,128,.15)", color: "#6B7E95",
-               borderRadius: 5, padding: "3px 10px", fontSize: 11 },
-  branchBtn: { display: "flex", alignItems: "center", gap: 12, width: "100%",
-               padding: 16, borderRadius: 10, cursor: "pointer", marginBottom: 8,
-               textAlign: "left" },
+  btn:       { flex: 1, padding: 10, borderRadius: 8, border: "1px solid #1E2D42", background: "#111827", color: "#E8EFF8", cursor: "pointer", fontSize: 13, fontFamily: "inherit" },
+  btnPrimary:{ flex: 1, padding: 10, borderRadius: 8, border: "none", background: "#185FA5", color: "#E6F1FB", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit" },
+  btnGreen:  { flex: 1, padding: 10, borderRadius: 8, border: "none", background: "#3B6D11", color: "#EAF3DE", cursor: "pointer", fontSize: 13, fontFamily: "inherit" },
+  errorBox:  { background: "rgba(163,45,45,.2)", border: "1px solid rgba(163,45,45,.5)", borderRadius: 8, padding: 14, color: "#F09595", fontSize: 13, marginBottom: 12 },
+  okBox:     { background: "rgba(59,109,17,.2)", border: "1px solid rgba(59,109,17,.4)", borderRadius: 8, padding: 12, color: "#97C459", fontSize: 13, marginBottom: 12 },
+  noteBox:   { background: "rgba(55,138,221,.08)", border: "1px solid rgba(55,138,221,.25)", borderRadius: 8, padding: 12, color: "#85B7EB", fontSize: 13, marginBottom: 12 },
+  warnBox:   { background: "rgba(186,117,23,.15)", border: "1px solid rgba(186,117,23,.4)", borderRadius: 8, padding: 12, color: "#FAC775", fontSize: 13, marginBottom: 10 },
+  tagAmber:  { background: "rgba(186,117,23,.2)", color: "#FAC775", borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 700 },
+  tagBlue:   { background: "rgba(55,138,221,.15)", color: "#85B7EB", borderRadius: 5, padding: "3px 10px", fontSize: 12, fontWeight: 600 },
+  tagGray:   { background: "rgba(136,135,128,.15)", color: "#6B7E95", borderRadius: 5, padding: "3px 10px", fontSize: 11 },
+  branchBtn: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: 16, borderRadius: 10, cursor: "pointer", marginBottom: 8, textAlign: "left", fontFamily: "inherit" },
 };
