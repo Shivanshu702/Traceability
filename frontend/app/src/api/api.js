@@ -34,6 +34,23 @@ export async function registerUser(username, password, role = "operator", tenant
   return res.json();
 }
 
+// Email-based password reset
+export async function forgotPasswordRequest(username, tenant_id = "default") {
+  const res = await fetch(`${BASE}/forgot-password/request`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, tenant_id }),
+  });
+  return res.json();
+}
+
+export async function forgotPasswordConfirm(token, new_password) {
+  const res = await fetch(`${BASE}/forgot-password/confirm`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password }),
+  });
+  return res.json();
+}
+
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 export const getPipeline             = ()       => req("GET",  "/pipeline");
 export const getAdminPipelineConfig  = ()       => req("GET",  "/admin/pipeline-config");
@@ -41,8 +58,6 @@ export const saveAdminPipelineConfig = (config) => req("PUT",  "/admin/pipeline-
 export const resetPipelineConfig     = ()       => req("POST", "/admin/pipeline-config/reset");
 
 // ── Trays ─────────────────────────────────────────────────────────────────────
-// GET /trays now returns {total, limit, offset, trays:[]}
-// Unwrap so all callers continue to receive a plain array.
 export async function getAllTrays(params = {}) {
   const data = await req("GET", "/trays?" + new URLSearchParams(params));
   return Array.isArray(data) ? data : (data.trays ?? []);
@@ -62,8 +77,6 @@ export const bulkScan = (ids, operator, next_stage_override) =>
 // ── History & logs ────────────────────────────────────────────────────────────
 export const getHistory = (trayId) => req("GET", `/history/${trayId}`);
 
-// GET /scan-log now returns {total, limit, offset, events:[]}
-// Unwrap so all callers continue to receive a plain array.
 export async function getScanLog(limit = 200) {
   const data = await req("GET", `/scan-log?limit=${limit}`);
   return Array.isArray(data) ? data : (data.events ?? []);
@@ -75,6 +88,10 @@ export const getStats     = (project = null) =>
 export const getAlerts    = () => req("GET", "/alerts");
 export const getStageLoad = () => req("GET", "/stage-load");
 export const getAnalytics = () => req("GET", "/analytics");
+
+// ── Operator + weekly analytics (new) ────────────────────────────────────────
+export const getOperatorStats = () => req("GET", "/analytics/operators");
+export const getWeeklyStats   = () => req("GET", "/analytics/weekly");
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
 export const getAuditLog = (limit = 100) => req("GET", `/audit-log?limit=${limit}`);
@@ -104,7 +121,7 @@ export function downloadTraysCSV(filters = {}) {
   _dl(`/export/trays${qs ? "?" + qs : ""}`, "trays.csv");
 }
 export function downloadScanLogCSV() { _dl("/export/scan-log", "scan_log.csv"); }
-export function downloadReportXLSX() { _dl("/export/report", "production_report.xlsx"); }
+export function downloadReportXLSX() { _dl("/export/report",   "production_report.xlsx"); }
 
 async function _dl(path, filename) {
   const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });

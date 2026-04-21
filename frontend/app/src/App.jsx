@@ -1,29 +1,45 @@
 import { useState, useEffect } from "react";
-import CreateTraysPage  from "./pages/CreateTraysPage";
-import ScanPage         from "./pages/ScanPage";
-import HistoryPage      from "./pages/HistoryPage";
-import Dashboard        from "./pages/Dashboard";
-import AlertDashboard   from "./pages/AlertDashboard";
-import LoginPage        from "./pages/LoginPage";
-import AdminPage        from "./pages/AdminPage";
-import ManageTraysPage  from "./pages/ManageTraysPage";
-import DevPage          from "./pages/DevPage";
+import CreateTraysPage   from "./pages/CreateTraysPage";
+import ScanPage          from "./pages/ScanPage";
+import HistoryPage       from "./pages/HistoryPage";
+import Dashboard         from "./pages/Dashboard";
+import AlertDashboard    from "./pages/AlertDashboard";
+import LoginPage         from "./pages/LoginPage";
+import AdminPage         from "./pages/AdminPage";
+import ManageTraysPage   from "./pages/ManageTraysPage";
+import DevPage           from "./pages/DevPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import OperatorReport    from "./pages/OperatorReportPage";
 import "./App.css";
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [page, setPage] = useState("dashboard");
+  const [user,        setUser]        = useState(null);
+  const [page,        setPage]        = useState("dashboard");
+  const [resetToken,  setResetToken]  = useState(null);
 
-  // Check if developer panel is requested via ?dev=1 in the URL
-  const params    = new URLSearchParams(window.location.search);
-  const devMode   = params.get("dev") === "1";
+  const params  = new URLSearchParams(window.location.search);
+  const devMode = params.get("dev") === "1";
 
-  // Show developer panel immediately — no login required, protected by DEV_KEY
-  if (devMode) {
-    return <DevPage />;
+  if (devMode) return <DevPage />;
+
+  // Check for password reset token in URL — show reset page before anything else
+  if (resetToken !== false) {
+    const urlToken = params.get("token");
+    if (urlToken && resetToken === null) {
+      setResetToken(urlToken);
+    } else if (resetToken === null) {
+      setResetToken(false); // no token in URL, proceed normally
+    }
   }
 
   useEffect(() => {
+    const urlToken = new URLSearchParams(window.location.search).get("token");
+    if (urlToken) {
+      setResetToken(urlToken);
+      return; // don't auto-login while showing reset page
+    }
+    setResetToken(false);
+
     const token     = localStorage.getItem("token");
     const username  = localStorage.getItem("username");
     const role      = localStorage.getItem("role");
@@ -59,6 +75,18 @@ export default function App() {
     setUser(null);
   }
 
+  // Show reset password page if token found in URL
+  if (resetToken) {
+    return (
+      <ResetPasswordPage
+        onDone={() => {
+          setResetToken(false);
+          window.history.replaceState({}, "", window.location.pathname);
+        }}
+      />
+    );
+  }
+
   if (!user) return <LoginPage onLogin={handleLogin} />;
 
   const isAdmin = user.role === "admin";
@@ -69,9 +97,10 @@ export default function App() {
     { key: "history",   label: "📋 History" },
     { key: "create",    label: "➕ Create Trays" },
     ...(isAdmin ? [
-      { key: "manage",  label: "🗂 Manage Trays" },
-      { key: "alerts",  label: "🚨 Alerts" },
-      { key: "admin",   label: "⚙ Admin" },
+      { key: "manage",   label: "🗂 Manage Trays" },
+      { key: "alerts",   label: "🚨 Alerts" },
+      { key: "operators",label: "👷 Operator Report" },
+      { key: "admin",    label: "⚙ Admin" },
     ] : []),
   ];
 
@@ -80,7 +109,7 @@ export default function App() {
       <header className="hdr">
         <span className="hdr-title">⚙ Traceability System</span>
         <span className="hdr-sub">{user.username}</span>
-        <span className="hdr-sub" style={{ color:"#9CA3AF", fontSize:11 }}>
+        <span className="hdr-sub" style={{ color: "#9CA3AF", fontSize: 11 }}>
           org: {user.tenant_id}
         </span>
         <span className="hdr-sub" style={{
@@ -91,7 +120,7 @@ export default function App() {
         </span>
         <button
           className="btn btn-red"
-          style={{ marginLeft:"auto", padding:"5px 14px", fontSize:12 }}
+          style={{ marginLeft: "auto", padding: "5px 14px", fontSize: 12 }}
           onClick={logout}
         >
           Logout
@@ -111,13 +140,14 @@ export default function App() {
       </nav>
 
       <main className="main">
-        {page === "dashboard" && <Dashboard />}
-        {page === "scan"      && <ScanPage />}
-        {page === "history"   && <HistoryPage />}
-        {page === "create"    && <CreateTraysPage />}
-        {page === "manage"    && isAdmin && <ManageTraysPage />}
-        {page === "alerts"    && isAdmin && <AlertDashboard />}
-        {page === "admin"     && isAdmin && <AdminPage />}
+        {page === "dashboard"  && <Dashboard />}
+        {page === "scan"       && <ScanPage />}
+        {page === "history"    && <HistoryPage />}
+        {page === "create"     && <CreateTraysPage />}
+        {page === "manage"     && isAdmin && <ManageTraysPage />}
+        {page === "alerts"     && isAdmin && <AlertDashboard />}
+        {page === "operators"  && isAdmin && <OperatorReport />}
+        {page === "admin"      && isAdmin && <AdminPage />}
       </main>
     </div>
   );
