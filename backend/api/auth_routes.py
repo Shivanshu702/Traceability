@@ -1,14 +1,9 @@
 """
 api/auth_routes.py
 ──────────────────
-Public authentication endpoints (no JWT required).
-
-Fixes:
-  1. Tenant hijacking — self-registration now validates tenant_id against
-     ALLOWED_TENANTS env var (comma-separated). If not set, all registrations
-     land in "default". Users can no longer inject themselves into any tenant.
-  2. Login returns HTTP 401 on bad credentials instead of 200 with {error:...}
-  3. Password reset replaced with per-user email token flow (see below).
+Password reset now sends to user.email (the dedicated email field on User).
+Falls back to username if username looks like an email and email is not set.
+Works correctly for any number of organisations and non-email usernames.
 """
 import os
 import secrets
@@ -30,43 +25,46 @@ router = APIRouter(tags=["auth"])
 _RESET_TTL_MINUTES = 15
 
 # ── Tenant allowlist ──────────────────────────────────────────────────────────
-# Set ALLOWED_TENANTS=LUMEL,ACME in Render env vars to restrict registration.
-# If unset, only "default" is accepted for self-registration.
 _raw_tenants = os.getenv("ALLOWED_TENANTS", "").strip()
-ALLOWED_TENANTS: set[str] = (
+ALLOWED_TENANTS = (
     {t.strip().upper() for t in _raw_tenants.split(",") if t.strip()}
-    if _raw_tenants
-    else set()   # empty = only "default" allowed
+    if _raw_tenants else set()
 )
 
 
-def _validate_tenant(tenant_id: str) -> str:
-    """
-    Validate tenant_id for self-registration.
-    - If ALLOWED_TENANTS is configured, the tenant_id must be in the list.
-    - If not configured, only 'default' is accepted.
-    Always returns the validated (uppercased) tenant_id or raises 403.
-    """
+def _validate_tenant(tenant_id):
     tid = (tenant_id or "default").strip().upper()
     if ALLOWED_TENANTS:
         if tid not in ALLOWED_TENANTS:
             raise HTTPException(403, "Unknown organisation ID. Contact your administrator.")
     else:
-        # No allowlist configured — only "default" is safe for self-registration
         tid = "default"
     return tid
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _make_token() -> tuple[str, str]:
+def _make_token():
     raw    = secrets.token_urlsafe(32)
     hashed = hashlib.sha256(raw.encode()).hexdigest()
     return raw, hashed
 
 
-def _hash_token(raw: str) -> str:
+def _hash_token(raw):
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _get_email_for_user(user):
+    """
+    Return the email address to send a reset link to.
+    Priority:
+      1. user.email (explicitly stored email address)
+      2. user.username if it contains '@' (legacy / single-org setups)
+      3. None — no email available, reset request silently succeeds but no email is sent
+    """
+    if user.email and "@" in user.email:
+        return user.email
+    if user.username and "@" in user.username:
+        return user.username
+    return None
 
 
 # ── register ──────────────────────────────────────────────────────────────────
@@ -81,14 +79,12 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
     pw        = payload.password
     tenant_id = _validate_tenant(payload.tenant_id or "default")
 
-    existing = db.query(User).filter(
-        User.tenant_id == tenant_id, User.username == name
-    ).first()
+    existing = db.query(User).filter(User.tenant_id == tenant_id, User.username == name).first()
     if existing:
         return {"error": "User already exists in this organisation"}
 
     is_first = not db.query(User).filter(User.tenant_id == tenant_id).first()
-    role = "admin" if is_first else (payload.role or "operator")
+    role     = "admin" if is_first else (payload.role or "operator")
 
     user = User(tenant_id=tenant_id, username=name, password=hash_password(pw), role=role)
     db.add(user)
@@ -105,12 +101,8 @@ def login(request: Request, payload: LoginIn, db: Session = Depends(get_db)):
     name      = payload.username.strip()
     tenant_id = (payload.tenant_id or "default").strip()
 
-    user = db.query(User).filter(
-        User.tenant_id == tenant_id, User.username == name
-    ).first()
-
+    user = db.query(User).filter(User.tenant_id == tenant_id, User.username == name).first()
     if not user or not verify_password(payload.password, user.password):
-        # Return 401 — not 200 — so rate-limiters and gateways can detect failures.
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_token(user)
@@ -121,6 +113,7 @@ def login(request: Request, payload: LoginIn, db: Session = Depends(get_db)):
         "role":         user.role,
         "username":     user.username,
         "tenant_id":    user.tenant_id,
+        "email":        user.email or "",
     }
 
 
@@ -134,8 +127,11 @@ def forgot_password_request(
     db: Session = Depends(get_db),
 ):
     """
-    Generate a single-use 15-minute reset token and email it to the user.
-    Always returns 200 with the same message — prevents user enumeration.
+    Works for any organisation size:
+    - Looks up the user by (username, tenant_id)
+    - Sends the reset link to user.email (or username if it's an email)
+    - Always returns the same message regardless of whether user exists
+      (prevents user enumeration)
     """
     username  = payload.username.strip()
     tenant_id = (payload.tenant_id or "default").strip()
@@ -145,7 +141,9 @@ def forgot_password_request(
     ).first()
 
     if user:
-        # Purge existing unused tokens for this user first.
+        email = _get_email_for_user(user)
+
+        # Purge existing unused tokens
         db.query(PasswordResetToken).filter(
             PasswordResetToken.tenant_id == tenant_id,
             PasswordResetToken.username  == username,
@@ -155,7 +153,6 @@ def forgot_password_request(
 
         raw_token, token_hash = _make_token()
         expires_at = datetime.utcnow() + timedelta(minutes=_RESET_TTL_MINUTES)
-
         db.add(PasswordResetToken(
             tenant_id  = tenant_id,
             username   = username,
@@ -164,7 +161,11 @@ def forgot_password_request(
         ))
         log_action(db, username, "PASSWORD_RESET_REQUESTED", f"tenant={tenant_id}", tenant_id)
         db.commit()
-        _send_reset_email(db, user, raw_token, tenant_id)
+
+        if email:
+            _send_reset_email(db, user, email, raw_token, tenant_id)
+        # If no email configured, token is created but silently not sent.
+        # Admin can retrieve the raw token via the admin panel (future feature).
 
     return {"message": "If that account exists, a password reset link has been sent."}
 
@@ -193,8 +194,7 @@ def forgot_password_confirm(
         raise HTTPException(400, "Reset token has expired. Please request a new one.")
 
     user = db.query(User).filter(
-        User.tenant_id == row.tenant_id,
-        User.username  == row.username,
+        User.tenant_id == row.tenant_id, User.username == row.username
     ).first()
     if not user:
         raise HTTPException(400, "Account not found.")
@@ -208,16 +208,17 @@ def forgot_password_confirm(
 
 # ── internal email helper ─────────────────────────────────────────────────────
 
-def _send_reset_email(db, user: User, raw_token: str, tenant_id: str):
+def _send_reset_email(db, user, email, raw_token, tenant_id):
     try:
         from services.email_service import get_email_settings, send_email
         settings   = get_email_settings(db, tenant_id)
         frontend   = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        reset_link = f"{frontend}/reset-password?token={raw_token}"
+        reset_link = f"{frontend}/?token={raw_token}"
         html_body  = f"""
         <p>Hi <strong>{user.username}</strong>,</p>
-        <p>A password reset was requested. Click below to set a new password.
-           This link expires in {_RESET_TTL_MINUTES} minutes.</p>
+        <p>A password reset was requested for your account (<strong>{tenant_id}</strong>).
+           Click the button below to set a new password.
+           This link expires in <strong>{_RESET_TTL_MINUTES} minutes</strong>.</p>
         <p style="margin:24px 0">
           <a href="{reset_link}" style="background:#185FA5;color:#fff;padding:12px 24px;
             border-radius:6px;text-decoration:none;font-weight:700">
@@ -225,13 +226,12 @@ def _send_reset_email(db, user: User, raw_token: str, tenant_id: str):
           </a>
         </p>
         <p style="font-size:12px;color:#6B7280">
-          If you didn't request this, ignore this email.
+          If you didn't request this, ignore this email — your password won't change.
         </p>
         """
         send_email(
-            settings,
-            [user.username] if "@" in user.username else [],
-            "Reset your Traceability password",
+            settings, [email],
+            f"Reset your Traceability password ({tenant_id})",
             f"<!DOCTYPE html><html><body>{html_body}</body></html>",
         )
     except Exception as exc:
