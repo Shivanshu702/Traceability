@@ -8,32 +8,20 @@ class Tray(Base):
 
     id              = Column(String, primary_key=True, index=True)
     tenant_id       = Column(String, default="default", index=True, nullable=False)
-
     stage           = Column(String, default="CREATED", index=True)
     is_done         = Column(Boolean, default=False)
     is_split_parent = Column(Boolean, default=False)
     parent_id       = Column(String, nullable=True, index=True)
-
-    # Project / batch info
     project         = Column(String, default="", index=True)
     shift           = Column(String, default="")
     created_by      = Column(String, default="")
     batch_no        = Column(String, default="")
     total_units     = Column(Integer, default=450)
-
-    # FIFO flag
     fifo_violated   = Column(Boolean, default=False)
-
-    # Timestamps
     created_at      = Column(DateTime, default=datetime.utcnow)
     last_updated    = Column(DateTime, default=datetime.utcnow, index=True)
     completed_at    = Column(DateTime, nullable=True)
-
-    # FIX: tracks when this tray entered its CURRENT stage — used for accurate FIFO ordering.
-    # last_updated is refreshed on every scan so it cannot reliably compare arrival order.
-    stage_entered_at = Column(DateTime, default=datetime.utcnow, nullable=True)
-
-    # Stuck-alert dedup: prevents the same tray flooding inboxes every hour.
+    stage_entered_at    = Column(DateTime, default=datetime.utcnow, nullable=True)
     last_stuck_alert_at = Column(DateTime, nullable=True)
 
 
@@ -59,6 +47,11 @@ class User(Base):
     username  = Column(String, index=True)
     password  = Column(String)
     role      = Column(String, default="operator")
+    # Email address for notifications and password reset.
+    # Separate from username so operators can have simple names like "garg"
+    # while still receiving reset emails at garg@lumel.com.
+    # Admin sets this when creating a user; users can update it themselves.
+    email     = Column(String, nullable=True)
 
 
 class PasswordResetToken(Base):
@@ -68,7 +61,6 @@ class PasswordResetToken(Base):
     id         = Column(Integer, primary_key=True, index=True)
     tenant_id  = Column(String, index=True, nullable=False)
     username   = Column(String, index=True, nullable=False)
-    # Store only the hash — never the raw token.
     token_hash = Column(String, nullable=False, unique=True)
     expires_at = Column(DateTime, nullable=False)
     used       = Column(Boolean, default=False)
@@ -87,7 +79,6 @@ class AuditLog(Base):
 
 
 class PipelineConfig(Base):
-    """One row per tenant — stores the full pipeline as JSON."""
     __tablename__ = "pipeline_configs"
 
     id         = Column(Integer, primary_key=True, index=True)
@@ -97,35 +88,26 @@ class PipelineConfig(Base):
 
 
 class EmailSettings(Base):
-    """SMTP + notification preferences, one row per tenant."""
     __tablename__ = "email_settings"
 
     id                    = Column(Integer, primary_key=True, index=True)
     tenant_id             = Column(String, unique=True, index=True, nullable=False)
-
-    # SMTP
     smtp_host             = Column(String, default="")
     smtp_port             = Column(Integer, default=587)
     smtp_user             = Column(String, default="")
     smtp_password         = Column(String, default="")
     smtp_use_tls          = Column(Boolean, default=True)
     from_email            = Column(String, default="")
-
-    # Recipients — comma-separated
     alert_recipients      = Column(Text, default="")
-
-    # Feature flags
     stuck_alert_enabled   = Column(Boolean, default=False)
     stuck_hours           = Column(Integer, default=1)
     daily_summary_enabled = Column(Boolean, default=False)
     daily_summary_hour    = Column(Integer, default=8)
     fifo_alert_enabled    = Column(Boolean, default=True)
-
     updated_at            = Column(DateTime, default=datetime.utcnow)
 
 
 class RoleConfig(Base):
-    """Custom roles with feature permissions, one per role name per tenant."""
     __tablename__ = "role_configs"
 
     id          = Column(Integer, primary_key=True, index=True)
