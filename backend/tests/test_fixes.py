@@ -1,13 +1,4 @@
-"""
-tests/test_fixes.py
-───────────────────
-Additional tests covering the fixes applied in this session:
-  • SQL stats aggregation correctness
-  • Tenant hijacking prevention
-  • Login 401 on bad credentials
-  • FIFO correctness (already in test_core.py, extended here)
-  • Stuck alert dedup (extended scenarios)
-"""
+
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock

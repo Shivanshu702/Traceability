@@ -1,9 +1,4 @@
-"""
-api/analytics_routes.py
-───────────────────────
-Stats, alerts, stage load, and analytics endpoints.
-Includes new operator productivity and weekly trend endpoints.
-"""
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, case, and_, distinct
 from sqlalchemy.orm import Session

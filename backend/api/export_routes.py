@@ -1,9 +1,4 @@
-"""
-api/export_routes.py
-────────────────────
-Data export endpoints — CSV and XLSX.
-Rate limited to prevent large exports from blocking the server.
-"""
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session

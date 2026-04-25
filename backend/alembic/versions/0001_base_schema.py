@@ -1,13 +1,4 @@
-"""Create base schema (trays, scan_events, users, audit_logs, pipeline_configs,
-email_settings, role_configs).
 
-This migration represents what Base.metadata.create_all() originally did.
-Fresh installs run this. Existing installs skip it with: alembic stamp 0001_base_schema
-
-Revision ID: 0001_base_schema
-Revises:
-Create Date: 2025-01-01 00:00:00
-"""
 from alembic import op
 import sqlalchemy as sa
 

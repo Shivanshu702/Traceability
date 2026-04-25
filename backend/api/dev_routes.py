@@ -1,10 +1,4 @@
-"""
-api/dev_routes.py
-─────────────────
-Developer-only endpoints for cross-tenant user management.
-Protected by DEV_KEY env var passed in request body.
-All actions are logged to the audit trail.
-"""
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session

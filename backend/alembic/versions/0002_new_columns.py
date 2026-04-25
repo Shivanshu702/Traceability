@@ -1,10 +1,4 @@
-"""Add stage_entered_at and last_stuck_alert_at to trays;
-create password_reset_tokens table.
 
-Revision ID: 0002_new_columns
-Revises: 0001_base_schema
-Create Date: 2025-01-01 00:01:00
-"""
 from alembic import op
 import sqlalchemy as sa
 

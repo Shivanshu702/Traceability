@@ -1,11 +1,4 @@
-"""
-tests/conftest.py
-─────────────────
-Shared pytest fixtures.
 
-Uses an in-memory SQLite database for each test function — fast, isolated,
-no file system side effects.
-"""
 import sys
 import os
 

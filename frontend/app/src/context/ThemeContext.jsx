@@ -1,11 +1,4 @@
-/**
- * src/context/ThemeContext.jsx
- *
- * Provides a dark / light mode toggle that:
- *   • Persists preference to localStorage
- *   • Applies a data-theme attribute on <html> (CSS variables handle the rest)
- *   • Defaults to "dark" (original app theme)
- */
+
 import { createContext, useContext, useEffect, useState } from "react";
 
 const ThemeContext = createContext(null);

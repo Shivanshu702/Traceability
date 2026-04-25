@@ -1,14 +1,4 @@
-/**
- * PipelineConfigEditor.jsx
- * Visual editor for the pipeline JSON config — no JSON knowledge needed.
- * Drop this into AdminPage.jsx as the Pipeline Config tab content,
- * replacing the raw <textarea>.
- *
- * Usage in AdminPage.jsx:
- *   import PipelineConfigEditor from "./PipelineConfigEditor";
- *   // inside the Pipeline Config tab:
- *   <PipelineConfigEditor />
- */
+
 import { useEffect, useState } from "react";
 import { getAdminPipelineConfig, saveAdminPipelineConfig } from "../api/api";
 

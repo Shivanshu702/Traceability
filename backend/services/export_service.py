@@ -1,9 +1,4 @@
-"""
-export_service.py
-─────────────────
-Provides CSV and XLSX exports for trays and scan log.
-XLSX uses openpyxl (must be installed: pip install openpyxl).
-"""
+
 import csv
 import io
 from datetime import datetime

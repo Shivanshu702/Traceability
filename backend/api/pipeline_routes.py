@@ -1,9 +1,4 @@
-"""
-api/pipeline_routes.py
-──────────────────────
-Public pipeline definition endpoint (read-only, auth required).
-Results cached per tenant — invalidated when admin updates config.
-"""
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db

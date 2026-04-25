@@ -1,9 +1,4 @@
-"""
-pipeline_service.py
-───────────────────
-Loads the pipeline configuration from the DB (with hardcoded fallback).
-Provides per-project stage override logic mirroring the GAS implementation.
-"""
+
 import json
 from sqlalchemy.orm import Session
 from models import PipelineConfig

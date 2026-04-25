@@ -1,28 +1,29 @@
-"""
-api/auth_routes.py
-──────────────────
-Password reset now sends to user.email (the dedicated email field on User).
-Falls back to username if username looks like an email and email is not set.
-Works correctly for any number of organisations and non-email usernames.
-"""
+
 import os
 import secrets
 import hashlib
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User, PasswordResetToken
 from schemas import LoginIn, RegisterIn, ForgotPasswordRequestIn, ForgotPasswordConfirmIn
-from core.auth import hash_password, verify_password, create_token, OPEN_REGISTRATION
+from core.auth import (
+    hash_password, verify_password, create_token,
+    OPEN_REGISTRATION, TOKEN_TTL, COOKIE_NAME,
+)
 from core.rate_limit import limiter, AUTH_LIMIT
 from services.audit_service import log_action
 
 router = APIRouter(tags=["auth"])
 
 _RESET_TTL_MINUTES = 15
+
+# Whether to set Secure flag on the auth cookie.
+# Set COOKIE_SECURE=false in .env when developing over plain HTTP.
+_COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() != "false"
 
 # ── Tenant allowlist ──────────────────────────────────────────────────────────
 _raw_tenants = os.getenv("ALLOWED_TENANTS", "").strip()
@@ -53,13 +54,6 @@ def _hash_token(raw):
 
 
 def _get_email_for_user(user):
-    """
-    Return the email address to send a reset link to.
-    Priority:
-      1. user.email (explicitly stored email address)
-      2. user.username if it contains '@' (legacy / single-org setups)
-      3. None — no email available, reset request silently succeeds but no email is sent
-    """
     if user.email and "@" in user.email:
         return user.email
     if user.username and "@" in user.username:
@@ -81,7 +75,7 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
 
     existing = db.query(User).filter(User.tenant_id == tenant_id, User.username == name).first()
     if existing:
-        return {"error": "User already exists in this organisation"}
+        raise HTTPException(409, "User already exists in this organisation")
 
     is_first = not db.query(User).filter(User.tenant_id == tenant_id).first()
     role     = "admin" if is_first else (payload.role or "operator")
@@ -97,24 +91,62 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
 
 @router.post("/login")
 @limiter.limit(AUTH_LIMIT)
-def login(request: Request, payload: LoginIn, db: Session = Depends(get_db)):
+def login(
+    request:  Request,
+    response: Response,
+    payload:  LoginIn,
+    db:       Session = Depends(get_db),
+):
+    """
+    Authenticate and issue a session cookie.
+
+    The JWT is written as an HttpOnly cookie so it is never accessible
+    to JavaScript. The response body returns only display-safe fields.
+    """
     name      = payload.username.strip()
-    tenant_id = (payload.tenant_id or "default").strip()
+    raw_tid   = (payload.tenant_id or "default").strip()
+    tenant_id = raw_tid.upper() if ALLOWED_TENANTS else "default"
 
     user = db.query(User).filter(User.tenant_id == tenant_id, User.username == name).first()
     if not user or not verify_password(payload.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_token(user)
+
+    # ── Set HttpOnly cookie ───────────────────────────────────────────────────
+    response.set_cookie(
+        key      = COOKIE_NAME,
+        value    = token,
+        httponly = True,
+        secure   = _COOKIE_SECURE,
+        samesite = "lax",
+        max_age  = TOKEN_TTL * 60,   # seconds
+        path     = "/",
+    )
+
     log_action(db, name, "LOGIN", "", tenant_id)
     db.commit()
+
+    # Do NOT include the token in the JSON body.
     return {
-        "access_token": token,
-        "role":         user.role,
-        "username":     user.username,
-        "tenant_id":    user.tenant_id,
-        "email":        user.email or "",
+        "ok":        True,
+        "role":      user.role,
+        "username":  user.username,
+        "tenant_id": user.tenant_id,
+        "email":     user.email or "",
     }
+
+
+# ── logout ────────────────────────────────────────────────────────────────────
+
+@router.post("/logout")
+def logout(response: Response):
+    """
+    Clear the session cookie. No auth check needed – if the cookie is already
+    gone the browser simply sends nothing, and we return 200 either way.
+    """
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    return {"ok": True}
 
 
 # ── forgot-password / request ─────────────────────────────────────────────────
@@ -126,13 +158,6 @@ def forgot_password_request(
     payload: ForgotPasswordRequestIn,
     db: Session = Depends(get_db),
 ):
-    """
-    Works for any organisation size:
-    - Looks up the user by (username, tenant_id)
-    - Sends the reset link to user.email (or username if it's an email)
-    - Always returns the same message regardless of whether user exists
-      (prevents user enumeration)
-    """
     username  = payload.username.strip()
     tenant_id = (payload.tenant_id or "default").strip()
 
@@ -143,7 +168,6 @@ def forgot_password_request(
     if user:
         email = _get_email_for_user(user)
 
-        # Purge existing unused tokens
         db.query(PasswordResetToken).filter(
             PasswordResetToken.tenant_id == tenant_id,
             PasswordResetToken.username  == username,
@@ -164,8 +188,6 @@ def forgot_password_request(
 
         if email:
             _send_reset_email(db, user, email, raw_token, tenant_id)
-        # If no email configured, token is created but silently not sent.
-        # Admin can retrieve the raw token via the admin panel (future feature).
 
     return {"message": "If that account exists, a password reset link has been sent."}
 
@@ -213,7 +235,7 @@ def _send_reset_email(db, user, email, raw_token, tenant_id):
         from services.email_service import get_email_settings, send_email
         settings   = get_email_settings(db, tenant_id)
         frontend   = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        reset_link = f"{frontend}/?token={raw_token}"
+        reset_link = f"{frontend}/reset-password?token={raw_token}"
         html_body  = f"""
         <p>Hi <strong>{user.username}</strong>,</p>
         <p>A password reset was requested for your account (<strong>{tenant_id}</strong>).
@@ -226,7 +248,7 @@ def _send_reset_email(db, user, email, raw_token, tenant_id):
           </a>
         </p>
         <p style="font-size:12px;color:#6B7280">
-          If you didn't request this, ignore this email — your password won't change.
+          If you didn't request this, ignore this email – your password won't change.
         </p>
         """
         send_email(

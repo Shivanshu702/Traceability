@@ -10,10 +10,12 @@ async function req(method, path, body) {
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(`${BASE}${path}`, opts);
   if (res.status === 401) {
-    ["token","role","username","tenant_id"].forEach(k => localStorage.removeItem(k));
+    ["token","role","username","tenant_id"]
+      .forEach(k => localStorage.removeItem(k));
     window.location.reload();
-    return {};
+    return null; // return null, not {}
   }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 

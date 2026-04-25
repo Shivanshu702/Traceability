@@ -1,15 +1,4 @@
-"""
-email_service.py
-────────────────
-Sends HTML emails for three event types mirroring the GAS implementation:
-  1. FIFO violation alert (immediate, on scan)
-  2. Stuck tray alert (hourly, via scheduler)
-  3. Daily production summary (daily, via scheduler)
 
-Priority:
-  1. Resend API (set RESEND_API_KEY env var) — works on all hosts, no port issues
-  2. SMTP fallback (set SMTP_HOST etc.) — may be blocked on free hosting tiers
-"""
 import smtplib
 import os
 import logging

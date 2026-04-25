@@ -1,21 +1,4 @@
-"""
-services/fifo_service.py
-────────────────────────
-FIFO violation detection.
 
-BUG FIXED: The original implementation compared `Tray.last_updated`, which is
-refreshed on every scan advance — not just on entry to the current stage.
-A fast-moving tray that passed through many prior stages quickly would appear
-to have arrived *later* than a slow tray, producing false negatives and
-false positives.
-
-FIX: We now compare `Tray.stage_entered_at`, which is set once when the tray
-transitions *into* its current stage (see tray_service.advance_tray).
-This correctly reflects the order in which trays joined the queue at
-this specific station.
-
-FIFO violations WARN and LOG — they do NOT block the scan.
-"""
 from models import Tray
 
 

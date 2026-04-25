@@ -1,11 +1,4 @@
-"""
-core/rate_limit.py
-──────────────────
-Rate limiting using slowapi (wraps the `limits` library).
-Protects against: brute-force login, scan spam, export abuse.
 
-Install:  pip install slowapi limits
-"""
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 

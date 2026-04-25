@@ -1,65 +1,81 @@
-"""
-services/analytics_service.py
 
-FIX APPLIED (2025-04):
-  detect_bottlenecks() was comparing Tray.last_updated to measure how long
-  a tray has been stuck at its current stage. This is incorrect — last_updated
-  is refreshed on every scan, so a tray that just arrived at a stage but had
-  many prior scans would appear as not stuck, while a tray that sat untouched
-  after its first-ever scan would be over-flagged.
+from datetime import datetime, timedelta, timezone
 
-  FIX: Now uses Tray.stage_entered_at (set once when the tray transitions into
-  its current stage) — exactly mirroring the fix already applied in fifo_service.
-  Falls back to last_updated for legacy rows predating the migration (same
-  fallback strategy as fifo_service).
-"""
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
+
 from models import Tray, ScanEvent
 from core.stages import STAGE_STUCK_LIMITS
-from datetime import datetime
 
 
-def detect_bottlenecks(db, tenant_id: str = "default") -> list:
-    """
-    Returns trays that have been sitting at their current stage longer than
-    the defined threshold for that stage.
+# ── Bottleneck detection ──────────────────────────────────────────────────────
 
-    Uses stage_entered_at (not last_updated) for accurate elapsed-time
-    measurement. Falls back to last_updated for pre-migration rows where
-    stage_entered_at is NULL.
-    """
-    trays = db.query(Tray).filter(
-        Tray.tenant_id == tenant_id,
-        Tray.is_done   == False,
-        Tray.stage     != "SPLIT",
-    ).all()
+def detect_bottlenecks(db: Session, tenant_id: str = "default") -> list:
+   
+    now = datetime.utcnow()
 
-    now         = datetime.utcnow()
-    bottlenecks = []
-
-    for t in trays:
-        limit = STAGE_STUCK_LIMITS.get(t.stage)
-        if not limit:
+    # Build one OR-clause per stage that has a defined stuck limit.
+    # Each clause matches trays at that stage whose arrival time is older than
+    # (now - limit).  Two sub-clauses handle the NULL fallback for legacy rows.
+    stage_clauses = []
+    for stage, limit_seconds in STAGE_STUCK_LIMITS.items():
+        if not limit_seconds:
             continue
+        cutoff = now - timedelta(seconds=limit_seconds)
 
-        # Prefer stage_entered_at; fall back to last_updated for pre-migration rows.
+        stage_clauses.append(
+            and_(
+                Tray.stage == stage,
+                or_(
+                    # Preferred: stage_entered_at is populated (post-migration rows)
+                    and_(
+                        Tray.stage_entered_at.isnot(None),
+                        Tray.stage_entered_at < cutoff,
+                    ),
+                    # Fallback: pre-migration rows where stage_entered_at is NULL
+                    and_(
+                        Tray.stage_entered_at.is_(None),
+                        Tray.last_updated.isnot(None),
+                        Tray.last_updated < cutoff,
+                    ),
+                ),
+            )
+        )
+
+    if not stage_clauses:
+        return []
+
+    stuck_trays = (
+        db.query(Tray)
+        .filter(
+            Tray.tenant_id == tenant_id,
+            Tray.is_done   == False,
+            Tray.stage     != "SPLIT",
+            or_(*stage_clauses),          # ← all threshold logic lives in SQL
+        )
+        .all()
+    )
+
+    bottlenecks = []
+    for t in stuck_trays:
         arrival = t.stage_entered_at or t.last_updated
         if not arrival:
             continue
-
         elapsed = (now - arrival).total_seconds()
-        if elapsed > limit:
-            bottlenecks.append({
-                "tray_id":       t.id,
-                "stage":         t.stage,
-                "project":       t.project,
-                "delay_seconds": int(elapsed),
-                "delay_hours":   round(elapsed / 3600, 1),
-            })
+        bottlenecks.append({
+            "tray_id":       t.id,
+            "stage":         t.stage,
+            "project":       t.project,
+            "delay_seconds": int(elapsed),
+            "delay_hours":   round(elapsed / 3600, 1),
+        })
 
     return bottlenecks
 
 
-def stage_load(db, tenant_id: str = "default") -> dict:
+# ── Stage load ────────────────────────────────────────────────────────────────
+
+def stage_load(db: Session, tenant_id: str = "default") -> dict:
     """Returns count of active trays per stage."""
     trays = db.query(Tray).filter(
         Tray.tenant_id == tenant_id,
@@ -73,7 +89,9 @@ def stage_load(db, tenant_id: str = "default") -> dict:
     return load
 
 
-def get_analytics(db, tenant_id: str = "default") -> dict:
+# ── Full analytics ────────────────────────────────────────────────────────────
+
+def get_analytics(db: Session, tenant_id: str = "default") -> dict:
     """
     Returns pipeline-wide analytics:
     total, completed, WIP, avg cycle time (seconds),

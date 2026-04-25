@@ -3,15 +3,6 @@ import { Html5Qrcode } from "html5-qrcode";
 
 /**
  * QRScanner
- * ─────────
- * Improvements over original:
- *  • Shows camera permission error with a clear message instead of silent console.error
- *  • Torch (flashlight) toggle button for low-light factory environments
- *  • Continuous scan mode — after a successful scan resets and keeps scanning
- *    (caller controls this via `continuousScan` prop, default false)
- *  • Larger qrbox on small screens for easier targeting
- *  • Cleans up reliably on unmount (prevents "scanner already running" errors
- *    when the component re-mounts)
  */
 export default function QRScanner({ onScan, continuousScan = false }) {
   const scannerRef = useRef(null);

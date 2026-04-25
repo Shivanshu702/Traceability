@@ -1,25 +1,4 @@
-"""
-services/scheduler_service.py
-──────────────────────────────
-Background job scheduler (APScheduler).
 
-Fixes in this version:
-  1. SQLAlchemy job store — jobs survive server restarts/deploys.
-     Previously, the in-process BackgroundScheduler lost all jobs on any
-     crash or redeploy within the misfire_grace_time window.
-
-  2. Stuck alert deduplication — each tray now carries last_stuck_alert_at.
-     An alert is only sent if the tray hasn't been alerted in the last
-     (stuck_hours * 2) period. This prevents hourly flood emails for
-     the same stuck tray.
-
-  3. Per-tenant daily summary hour — previously the cron was hardcoded to
-     08:00 UTC for every tenant. The job now runs every hour at :00 and
-     checks whether the current UTC hour matches each tenant's configured
-     daily_summary_hour, respecting per-tenant preferences.
-
-Requires: pip install apscheduler[sqlalchemy]
-"""
 import logging
 import os
 from datetime import datetime, timedelta

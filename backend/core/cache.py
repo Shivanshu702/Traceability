@@ -1,19 +1,4 @@
-"""
-core/cache.py
-─────────────
-Simple thread-safe in-memory TTL cache.
 
-Why not Redis yet?
-  At 50 customers with a single-server deployment, Redis adds infrastructure
-  cost and ops complexity for marginal gain. This in-memory cache is safe
-  because we have one Uvicorn process (WEB_CONCURRENCY=1 on Render free tier).
-  When you scale to multiple workers or multiple servers, swap this for Redis.
-
-What's cached:
-  - Pipeline config per tenant   (60s TTL) — read on EVERY authenticated request
-  - Stats per tenant+project     (20s TTL) — hit on every dashboard load
-  - Pipeline definition          (300s TTL) — near-static data
-"""
 import time
 from threading import Lock
 from typing import Any

@@ -1,14 +1,4 @@
-"""
-tray_service.py
-───────────────
-Core tray advancement logic.
 
-Changes in this version:
-  • Sets tray.stage_entered_at on every stage transition so fifo_service
-    can compare genuine arrival times (not last_updated).
-  • Split children also get stage_entered_at = now on creation.
-  • All other logic unchanged.
-"""
 from models import Tray
 from services.fifo_service import check_fifo_violation
 from services.log_service import log_scan

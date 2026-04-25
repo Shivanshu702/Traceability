@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Tray(Base):
@@ -18,10 +18,10 @@ class Tray(Base):
     batch_no        = Column(String, default="")
     total_units     = Column(Integer, default=450)
     fifo_violated   = Column(Boolean, default=False)
-    created_at      = Column(DateTime, default=datetime.utcnow)
-    last_updated    = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    last_updated    = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     completed_at    = Column(DateTime, nullable=True)
-    stage_entered_at    = Column(DateTime, default=datetime.utcnow, nullable=True)
+    stage_entered_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True)
     last_stuck_alert_at = Column(DateTime, nullable=True)
 
 
@@ -36,7 +36,7 @@ class ScanEvent(Base):
     operator    = Column(String, default="SYSTEM")
     fifo_flag   = Column(Boolean, default=False)
     note        = Column(Text, default="")
-    timestamp   = Column(DateTime, default=datetime.utcnow, index=True)
+    timestamp   = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 
 class User(Base):
@@ -64,7 +64,7 @@ class PasswordResetToken(Base):
     token_hash = Column(String, nullable=False, unique=True)
     expires_at = Column(DateTime, nullable=False)
     used       = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class AuditLog(Base):
@@ -75,7 +75,7 @@ class AuditLog(Base):
     username  = Column(String, index=True)
     action    = Column(String)
     details   = Column(String, default="")
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class PipelineConfig(Base):
@@ -84,7 +84,7 @@ class PipelineConfig(Base):
     id         = Column(Integer, primary_key=True, index=True)
     tenant_id  = Column(String, unique=True, index=True, nullable=False)
     config     = Column(Text, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class EmailSettings(Base):
@@ -93,7 +93,7 @@ class EmailSettings(Base):
     id                    = Column(Integer, primary_key=True, index=True)
     tenant_id             = Column(String, unique=True, index=True, nullable=False)
     smtp_host             = Column(String, default="")
-    smtp_port             = Column(Integer, default=587)
+    smtp_port             = Column(Integer, default=465)
     smtp_user             = Column(String, default="")
     smtp_password         = Column(String, default="")
     smtp_use_tls          = Column(Boolean, default=True)
@@ -104,7 +104,7 @@ class EmailSettings(Base):
     daily_summary_enabled = Column(Boolean, default=False)
     daily_summary_hour    = Column(Integer, default=8)
     fifo_alert_enabled    = Column(Boolean, default=True)
-    updated_at            = Column(DateTime, default=datetime.utcnow)
+    updated_at            = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class RoleConfig(Base):
@@ -115,4 +115,4 @@ class RoleConfig(Base):
     name        = Column(String, nullable=False)
     label       = Column(String, default="")
     permissions = Column(Text, default="[]")
-    updated_at  = Column(DateTime, default=datetime.utcnow)
+    updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))

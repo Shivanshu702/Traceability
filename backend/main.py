@@ -1,16 +1,5 @@
 """
 main.py
-───────
-Application entry point.
-Registers all route modules and middleware.
-
-FIXES APPLIED (2025-04):
-  1. dev_routes is now only registered when ENV != "production".
-     Previously it was always registered; now the /dev/* endpoints
-     are completely absent from the production server process.
-  2. CORS default changed from ["*"] to ["http://localhost:5173"] so
-     a missing ALLOWED_ORIGINS env var does not open the API to all origins
-     in production. Set ALLOWED_ORIGINS=* explicitly if you need it.
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -35,8 +24,11 @@ ENV = os.getenv("ENV", "production")
 # ── Startup / shutdown ────────────────────────────────────────────────────────
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+async def lifespan(app):
+    if os.getenv("ENV") != "production":
+        # dev/test only: auto-create tables without migrations
+        Base.metadata.create_all(bind=engine)
+    # production: rely on alembic upgrade head (in start.sh)
     from services.scheduler_service import start_scheduler, stop_scheduler
     start_scheduler()
     yield

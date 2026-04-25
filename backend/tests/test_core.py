@@ -1,15 +1,4 @@
-"""
-tests/test_core.py
-──────────────────
-Core service layer tests.
 
-Coverage:
-  • FIFO violation detection (correct vs original buggy logic)
-  • Tray advancement: normal, already-complete, branch, already-split
-  • Tray split: parent marker + child creation + stage_entered_at
-  • Stuck alert deduplication logic
-  • Password reset token lifecycle
-"""
 import hashlib
 import secrets
 from datetime import datetime, timedelta

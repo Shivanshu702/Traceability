@@ -1,158 +1,195 @@
-import { useState, useEffect } from "react";
-import CreateTraysPage  from "./pages/CreateTraysPage";
-import ScanPage         from "./pages/ScanPage";
-import HistoryPage      from "./pages/HistoryPage";
-import Dashboard        from "./pages/Dashboard";
-import AlertDashboard   from "./pages/AlertDashboard";
-import LoginPage        from "./pages/LoginPage";
-import AdminPage        from "./pages/AdminPage";
-import ManageTraysPage  from "./pages/ManageTraysPage";
-import DevPage          from "./pages/DevPage";
-import { useTheme }     from "./context/ThemeContext";
-import { useLang }      from "./context/LangContext";
+
+
+import { useEffect } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  NavLink,
+  Navigate,
+  useNavigate,
+  useLocation,
+} from "react-router-dom";
+import { useState } from "react";
+
+import CreateTraysPage from "./pages/CreateTraysPage";
+import ScanPage        from "./pages/ScanPage";
+import HistoryPage     from "./pages/HistoryPage";
+import Dashboard       from "./pages/Dashboard";
+import AlertDashboard  from "./pages/AlertDashboard";
+import LoginPage       from "./pages/LoginPage";
+import AdminPage       from "./pages/AdminPage";
+import ManageTraysPage from "./pages/ManageTraysPage";
+import DevPage         from "./pages/DevPage";
 import "./App.css";
 
-export default function App() {
+// ── Auth-required wrapper ─────────────────────────────────────────────────────
+function RequireAuth({ user, children }) {
+  const location = useLocation();
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return children;
+}
+
+// ── Admin-only wrapper ────────────────────────────────────────────────────────
+function RequireAdmin({ user, children }) {
+  if (!user || user.role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+// ── Inner app (has access to router hooks) ────────────────────────────────────
+function AppShell() {
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const [user, setUser] = useState(null);
-  const [page, setPage] = useState("dashboard");
-  const { theme, toggleTheme } = useTheme();
-  const { t, lang, setLang, LANGUAGES } = useLang();
 
-  // Show developer panel via ?dev=1  (no login required, protected by DEV_KEY)
-  const params  = new URLSearchParams(window.location.search);
-  const devMode = params.get("dev") === "1";
-  if (devMode) return <DevPage />;
-
+  // Rehydrate session from cookie-backed user info stored in sessionStorage.
+  // Note: the JWT itself travels as an HttpOnly cookie (see auth fix) —
+  // only non-sensitive display fields (username, role, tenant_id) live here.
   useEffect(() => {
-    const token     = localStorage.getItem("token");
-    const username  = localStorage.getItem("username");
-    const role      = localStorage.getItem("role");
-    const tenant_id = localStorage.getItem("tenant_id") || "default";
-
-    const scanId = new URLSearchParams(window.location.search).get("scan");
-    if (scanId) {
-      localStorage.setItem("pendingScan", scanId);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-
-    if (token && username) {
+    const username  = sessionStorage.getItem("username");
+    const role      = sessionStorage.getItem("role");
+    const tenant_id = sessionStorage.getItem("tenant_id") || "default";
+    if (username) {
       setUser({ username, role: role || "operator", tenant_id });
-      const pending = localStorage.getItem("pendingScan");
-      if (pending) setPage("scan");
     }
   }, []);
 
   function handleLogin(userData) {
-    localStorage.setItem("username",  userData.username);
-    localStorage.setItem("role",      userData.role);
-    localStorage.setItem("tenant_id", userData.tenant_id || "default");
+    // Persist display-only fields so a hard reload restores the shell UI.
+    sessionStorage.setItem("username",  userData.username);
+    sessionStorage.setItem("role",      userData.role);
+    sessionStorage.setItem("tenant_id", userData.tenant_id || "default");
     setUser(userData);
-    const pending = localStorage.getItem("pendingScan");
-    setPage(pending ? "scan" : "dashboard");
+
+    // If the user was redirected to /login from a protected route, send them back.
+    const from = location.state?.from?.pathname || "/";
+    navigate(from, { replace: true });
   }
 
-  function logout() {
-    ["token", "username", "role", "tenant_id", "pendingScan"].forEach(k =>
-      localStorage.removeItem(k)
+  async function logout() {
+    // Tell the backend to clear the HttpOnly cookie.
+    await fetch(
+      `${import.meta.env.VITE_API_URL || "http://localhost:8001"}/logout`,
+      { method: "POST", credentials: "include" },
     );
-    window.history.replaceState({}, "", window.location.pathname);
+    sessionStorage.clear();
     setUser(null);
+    navigate("/login", { replace: true });
   }
 
-  // ── Language + theme controls (shown on every screen) ────────────────────
-  const Controls = () => (
-    <div className="hdr-controls">
-      {/* Language picker */}
-      <select
-        className="lang-select"
-        value={lang}
-        onChange={e => setLang(e.target.value)}
-        title={t("language")}
-        aria-label={t("language")}
-      >
-        {LANGUAGES.map(l => (
-          <option key={l.code} value={l.code}>
-            {l.flag} {l.label}
-          </option>
-        ))}
-      </select>
+  const isAdmin = user?.role === "admin";
 
-      {/* Dark / light toggle */}
-      <button
-        className="theme-toggle"
-        onClick={toggleTheme}
-        title={t("theme")}
-        aria-label={t("theme")}
-      >
-        {theme === "dark" ? "☀️ " + t("lightMode") : "🌙 " + t("darkMode")}
-      </button>
-    </div>
-  );
-
-  if (!user) return <LoginPage onLogin={handleLogin} Controls={Controls} />;
-
-  const isAdmin = user.role === "admin";
-
+  // ── Nav tabs ──────────────────────────────────────────────────────────────
   const navTabs = [
-    { key: "dashboard", label: "📊 " + t("dashboard") },
-    { key: "scan",      label: "📷 " + t("scan") },
-    { key: "history",   label: "📋 " + t("history") },
-    { key: "create",    label: "➕ " + t("createTrays") },
+    { to: "/",        label: "📊 Dashboard" },
+    { to: "/scan",    label: "📷 Scan"      },
+    { to: "/history", label: "📋 History"   },
+    { to: "/create",  label: "➕ Create Trays" },
     ...(isAdmin ? [
-      { key: "manage",  label: "🗂 "  + t("manageTrays") },
-      { key: "alerts",  label: "🚨 " + t("alerts") },
-      { key: "admin",   label: "⚙ "  + t("admin") },
+      { to: "/manage", label: "🗂 Manage Trays" },
+      { to: "/alerts", label: "🚨 Alerts"       },
+      { to: "/admin",  label: "⚙ Admin"         },
     ] : []),
   ];
 
+  // ── Routes ────────────────────────────────────────────────────────────────
   return (
     <div className="app">
-      <header className="hdr">
-        <span className="hdr-title">⚙ Traceability System</span>
-        <span className="hdr-sub">{user.username}</span>
-        <span className="hdr-sub" style={{ color: "#9CA3AF", fontSize: 11 }}>
-          {t("org")}: {user.tenant_id}
-        </span>
-        <span className="hdr-sub" style={{
-          background: isAdmin ? "rgba(226,75,74,.2)" : "transparent",
-          color: "var(--red-lt)",
-        }}>
-          {user.role}
-        </span>
+      {user && (
+        <>
+          <header className="hdr">
+            <span className="hdr-title">⚙ Traceability System</span>
+            <span className="hdr-sub">{user.username}</span>
+            <span className="hdr-sub" style={{ color: "#9CA3AF", fontSize: 11 }}>
+              org: {user.tenant_id}
+            </span>
+            <span className="hdr-sub" style={{
+              background: isAdmin ? "rgba(226,75,74,.2)" : "transparent",
+              color: "#F09595",
+            }}>
+              {user.role}
+            </span>
+            <button
+              className="btn btn-red"
+              style={{ marginLeft: "auto", padding: "5px 14px", fontSize: 12 }}
+              onClick={logout}
+            >
+              Logout
+            </button>
+          </header>
 
-        {/* Theme + Language controls */}
-        <Controls />
-
-        <button
-          className="btn btn-red"
-          style={{ padding: "5px 14px", fontSize: 12 }}
-          onClick={logout}
-        >
-          {t("logout")}
-        </button>
-      </header>
-
-      <nav className="nav">
-        {navTabs.map(({ key, label }) => (
-          <button
-            key={key}
-            className={`nb ${page === key ? "on" : ""}`}
-            onClick={() => setPage(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+          <nav className="nav">
+            {navTabs.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}           /* exact match for root only */
+                className={({ isActive }) => `nb${isActive ? " on" : ""}`}
+              >
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+        </>
+      )}
 
       <main className="main">
-        {page === "dashboard" && <Dashboard />}
-        {page === "scan"      && <ScanPage />}
-        {page === "history"   && <HistoryPage />}
-        {page === "create"    && <CreateTraysPage />}
-        {page === "manage"    && isAdmin && <ManageTraysPage />}
-        {page === "alerts"    && isAdmin && <AlertDashboard />}
-        {page === "admin"     && isAdmin && <AdminPage />}
+        <Routes>
+          {/* Developer panel – no login, guarded by DEV_KEY on backend */}
+          <Route path="/dev" element={<DevPage />} />
+
+          {/* Auth */}
+          <Route
+            path="/login"
+            element={
+              user
+                ? <Navigate to="/" replace />
+                : <LoginPage onLogin={handleLogin} />
+            }
+          />
+
+          {/* Protected routes */}
+          <Route path="/" element={
+            <RequireAuth user={user}><Dashboard /></RequireAuth>
+          } />
+          <Route path="/scan" element={
+            <RequireAuth user={user}><ScanPage /></RequireAuth>
+          } />
+          <Route path="/history" element={
+            <RequireAuth user={user}><HistoryPage /></RequireAuth>
+          } />
+          <Route path="/create" element={
+            <RequireAuth user={user}><CreateTraysPage /></RequireAuth>
+          } />
+
+          {/* Admin-only routes */}
+          <Route path="/manage" element={
+            <RequireAdmin user={user}><ManageTraysPage /></RequireAdmin>
+          } />
+          <Route path="/alerts" element={
+            <RequireAdmin user={user}><AlertDashboard /></RequireAdmin>
+          } />
+          <Route path="/admin" element={
+            <RequireAdmin user={user}><AdminPage /></RequireAdmin>
+          } />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
+  );
+}
+
+// ── Root export (provides the router context) ─────────────────────────────────
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
   );
 }

@@ -1,15 +1,13 @@
-"""
-api/admin_routes.py
-───────────────────
-Admin-only endpoints: pipeline config, user management, role management, email settings.
-Added: PUT /admin/users/{username}/email so admins can set the reset email per user.
-"""
+
 import json as _json
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
 from database import get_db
 from models import User, EmailSettings, RoleConfig
+from schemas import PipelineConfigIn
 from core.auth import get_current_user, require_admin, hash_password, tenant
 from core.cache import pipeline_cache, stats_cache, stage_load_cache
 from services.audit_service import log_action
@@ -28,9 +26,25 @@ def get_admin_pipeline_config(user: dict = Depends(require_admin), db: Session =
 
 
 @router.put("/pipeline-config")
-def update_pipeline_config(payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid   = tenant(user)
-    saved = save_pipeline_config(db, tid, payload)
+def update_pipeline_config(
+    payload: PipelineConfigIn,          # ← typed model replaces bare dict
+    user:    dict    = Depends(require_admin),
+    db:      Session = Depends(get_db),
+):
+    """
+    Persist a new pipeline configuration for the authenticated tenant.
+
+    The payload is validated by PipelineConfigIn before this handler runs:
+      • stages list must be non-empty and have unique IDs
+      • split.atStage / split.resumeAtStage must reference defined stage IDs
+      • branch.atStage must reference a defined stage ID
+    A 422 is returned immediately if validation fails, with field-level detail.
+    """
+    tid  = tenant(user)
+    # Convert the validated Pydantic model back to a plain dict for the service
+    # layer (which expects the same JSON-serialisable shape it always has).
+    config_dict = payload.model_dump(exclude_none=False)
+    saved = save_pipeline_config(db, tid, config_dict)
     pipeline_cache.delete(f"pipeline:{tid}")
     log_action(db, user["sub"], "UPDATE_PIPELINE_CONFIG", "", tid)
     db.commit()
@@ -63,16 +77,16 @@ def list_users(user: dict = Depends(require_admin), db: Session = Depends(get_db
 
 @router.post("/users")
 def admin_create_user(payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid  = tenant(user)
-    name = (payload.get("username") or "").strip()
-    pw   = payload.get("password") or ""
-    role = (payload.get("role") or "operator").strip()
+    tid   = tenant(user)
+    name  = (payload.get("username") or "").strip()
+    pw    = payload.get("password") or ""
+    role  = (payload.get("role") or "operator").strip()
     email = (payload.get("email") or "").strip() or None
 
     if not name or not pw:
         raise HTTPException(400, "username and password required")
     if db.query(User).filter(User.tenant_id == tid, User.username == name).first():
-        return {"error": "User already exists"}
+        raise HTTPException(409, "User already exists")
 
     new_user = User(tenant_id=tid, username=name, password=hash_password(pw), role=role, email=email)
     db.add(new_user)
@@ -96,11 +110,6 @@ def change_user_role(target_username: str, payload: dict, user: dict = Depends(r
 
 @router.put("/users/{target_username}/email")
 def set_user_email(target_username: str, payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    """
-    Set or update the email address for a user.
-    This is the address that password reset links are sent to,
-    so it works even when usernames are not email addresses.
-    """
     tid    = tenant(user)
     email  = (payload.get("email") or "").strip() or None
     target = db.query(User).filter(User.tenant_id == tid, User.username == target_username).first()
@@ -144,14 +153,12 @@ def delete_user(target_username: str, user: dict = Depends(require_admin), db: S
 @router.get("/features")
 def get_features(user: dict = Depends(require_admin)):
     features = [
-        {"key": "scan",          "label": "Scan trays"},
-        {"key": "create_trays",  "label": "Create trays"},
-        {"key": "history",       "label": "View history"},
-        {"key": "dashboard",     "label": "Dashboard"},
-        {"key": "alerts",        "label": "Alerts & analytics"},
-        {"key": "manage_trays",  "label": "Manage & delete trays"},
-        {"key": "export",        "label": "Export data"},
-        {"key": "admin",         "label": "Admin panel"},
+        {"key": "scan",         "label": "Scan trays"},
+        {"key": "create_trays", "label": "Create trays"},
+        {"key": "history",      "label": "View history"},
+        {"key": "dashboard",    "label": "Dashboard"},
+        {"key": "alerts",       "label": "Alerts dashboard"},
+        {"key": "export",       "label": "Export data"},
     ]
     return {"features": features}
 
@@ -159,44 +166,34 @@ def get_features(user: dict = Depends(require_admin)):
 @router.get("/roles")
 def list_roles(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
     rows = db.query(RoleConfig).filter(RoleConfig.tenant_id == tenant(user)).all()
-    return [
-        {"name": r.name, "label": r.label, "permissions": _json.loads(r.permissions or "[]")}
-        for r in rows
-    ]
+    return [{"name": r.name, "features": _json.loads(r.features or "[]")} for r in rows]
 
 
 @router.post("/roles")
 def create_role(payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid  = tenant(user)
-    name = (payload.get("name") or "").strip().lower().replace(" ", "_")
+    tid      = tenant(user)
+    name     = (payload.get("name") or "").strip()
+    features = payload.get("features", [])
     if not name:
         raise HTTPException(400, "name required")
     if db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == name).first():
-        return {"error": "Role already exists"}
-    row = RoleConfig(
-        tenant_id   = tid,
-        name        = name,
-        label       = payload.get("label") or name,
-        permissions = _json.dumps(payload.get("permissions") or []),
-    )
+        raise HTTPException(409, "Role already exists")
+    row = RoleConfig(tenant_id=tid, name=name, features=_json.dumps(features))
     db.add(row)
-    log_action(db, user["sub"], "CREATE_ROLE", name, tid)
+    log_action(db, user["sub"], "CREATE_ROLE", f"role={name}", tid)
     db.commit()
     return {"ok": True, "name": name}
 
 
 @router.put("/roles/{role_name}")
 def update_role(role_name: str, payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid = tenant(user)
-    row = db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == role_name).first()
+    tid  = tenant(user)
+    row  = db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == role_name).first()
     if not row:
         raise HTTPException(404, "Role not found")
-    if "label" in payload:
-        row.label = payload["label"]
-    if "permissions" in payload:
-        row.permissions = _json.dumps(payload["permissions"])
-    row.updated_at = datetime.utcnow()
-    log_action(db, user["sub"], "UPDATE_ROLE", role_name, tid)
+    if "features" in payload:
+        row.features = _json.dumps(payload["features"])
+    log_action(db, user["sub"], "UPDATE_ROLE", f"role={role_name}", tid)
     db.commit()
     return {"ok": True}
 
@@ -208,7 +205,7 @@ def delete_role(role_name: str, user: dict = Depends(require_admin), db: Session
     if not row:
         raise HTTPException(404, "Role not found")
     db.delete(row)
-    log_action(db, user["sub"], "DELETE_ROLE", role_name, tid)
+    log_action(db, user["sub"], "DELETE_ROLE", f"role={role_name}", tid)
     db.commit()
     return {"ok": True}
 
@@ -217,21 +214,7 @@ def delete_role(role_name: str, user: dict = Depends(require_admin), db: Session
 
 @router.get("/email-settings")
 def get_email_settings_route(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    s = get_email_settings(db, tenant(user))
-    return {
-        "smtp_host":             s.smtp_host,
-        "smtp_port":             s.smtp_port,
-        "smtp_user":             s.smtp_user,
-        "smtp_password":         "",   # never expose stored password
-        "smtp_use_tls":          s.smtp_use_tls,
-        "from_email":            s.from_email,
-        "alert_recipients":      s.alert_recipients,
-        "stuck_alert_enabled":   s.stuck_alert_enabled,
-        "stuck_hours":           s.stuck_hours,
-        "daily_summary_enabled": s.daily_summary_enabled,
-        "daily_summary_hour":    s.daily_summary_hour,
-        "fifo_alert_enabled":    s.fifo_alert_enabled,
-    }
+    return get_email_settings(db, tenant(user))
 
 
 @router.put("/email-settings")
@@ -241,18 +224,10 @@ def save_email_settings_route(payload: dict, user: dict = Depends(require_admin)
     if not row:
         row = EmailSettings(tenant_id=tid)
         db.add(row)
-
-    for field in ["smtp_host","smtp_port","smtp_use_tls","smtp_user","from_email",
-                  "alert_recipients","stuck_alert_enabled","stuck_hours",
-                  "daily_summary_enabled","daily_summary_hour","fifo_alert_enabled"]:
+    for field in ("api_key", "from_email", "from_name", "alert_emails",
+                  "daily_summary_hour", "send_stuck_alerts", "send_daily_summary"):
         if field in payload:
             setattr(row, field, payload[field])
-
-    # Only update password if explicitly provided (non-empty)
-    if payload.get("smtp_password"):
-        row.smtp_password = payload["smtp_password"]
-
-    row.updated_at = datetime.utcnow()
     log_action(db, user["sub"], "UPDATE_EMAIL_SETTINGS", "", tid)
     db.commit()
     return {"ok": True}
@@ -262,12 +237,9 @@ def save_email_settings_route(payload: dict, user: dict = Depends(require_admin)
 def send_test_email(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
     tid      = tenant(user)
     settings = get_email_settings(db, tid)
-    recipients = [r.strip() for r in (settings.alert_recipients or "").split(",") if r.strip()]
-    if not recipients:
-        return {"error": "No alert recipients configured"}
-    ok = send_email(
-        settings, recipients,
-        "Traceability — Test Email",
-        "<p>This is a test email from the Traceability System. If you received this, email alerts are working correctly.</p>",
-    )
-    return {"ok": ok, "sent_to": recipients}
+    try:
+        send_email(settings, settings.get("alert_emails", []),
+                   "Traceability – test email", "<p>Test email sent successfully.</p>")
+        return {"ok": True}
+    except Exception as exc:
+        raise HTTPException(500, str(exc))

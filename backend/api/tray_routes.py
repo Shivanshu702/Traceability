@@ -1,13 +1,4 @@
-"""
-api/tray_routes.py
-──────────────────
-Tray creation, scanning, history, and QR code endpoints.
 
-Changes:
-  • GET /trays now supports limit / offset pagination (was unbounded)
-  • POST /trays/create, /scan, /scan/bulk, /trays/bulk-delete use Pydantic models
-    instead of raw dict — gives proper validation + OpenAPI docs
-"""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -255,7 +246,8 @@ def scan(
     )
 
     if result.get("ok"):
-        log_action(db, user["sub"], "SCAN", f"{tray_id}:{tray.stage}", tid)
+        log_action(db, user["sub"], "SCAN", 
+                   f"{tray_id}:{result['from_stage']}→{result['to_stage']}", tid)
         stats_cache.invalidate_prefix(f"stats:{tid}")
         if result.get("fifo_vio") and result.get("older_trays"):
             try:
