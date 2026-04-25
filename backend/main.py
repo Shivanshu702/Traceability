@@ -3,6 +3,14 @@ main.py
 ───────
 Application entry point.
 Registers all route modules and middleware.
+
+FIXES APPLIED (2025-04):
+  1. dev_routes is now only registered when ENV != "production".
+     Previously it was always registered; now the /dev/* endpoints
+     are completely absent from the production server process.
+  2. CORS default changed from ["*"] to ["http://localhost:5173"] so
+     a missing ALLOWED_ORIGINS env var does not open the API to all origins
+     in production. Set ALLOWED_ORIGINS=* explicitly if you need it.
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -15,14 +23,14 @@ from core.rate_limit import limiter
 import os
 
 # ── Route modules ─────────────────────────────────────────────────────────────
-from api.auth_routes     import router as auth_router
-from api.tray_routes     import router as tray_router
-from api.admin_routes    import router as admin_router
+from api.auth_routes      import router as auth_router
+from api.tray_routes      import router as tray_router
+from api.admin_routes     import router as admin_router
 from api.analytics_routes import router as analytics_router
-from api.export_routes   import router as export_router
-from api.pipeline_routes import router as pipeline_router
-from api.dev_routes      import router as dev_router
+from api.export_routes    import router as export_router
+from api.pipeline_routes  import router as pipeline_router
 
+ENV = os.getenv("ENV", "production")
 
 # ── Startup / shutdown ────────────────────────────────────────────────────────
 
@@ -36,17 +44,23 @@ async def lifespan(app: FastAPI):
 
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-_raw = os.getenv("ALLOWED_ORIGINS", "")
-ALLOWED_ORIGINS = [o.strip() for o in _raw.split(",") if o.strip()] if _raw else ["*"]
+_raw = os.getenv("ALLOWED_ORIGINS", "").strip()
+if _raw:
+    ALLOWED_ORIGINS = [o.strip() for o in _raw.split(",") if o.strip()]
+else:
+    # FIX: Default to localhost only, not "*".
+    # In production, always set ALLOWED_ORIGINS to your frontend domain.
+    ALLOWED_ORIGINS = ["http://localhost:5173"]
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title     = "FIFO Traceability API",
-    version   = "4.0.0",
+    version   = "4.1.0",
     lifespan  = lifespan,
-    docs_url  = "/docs" if os.getenv("ENV", "production") != "production" else None,
+    # FIX: docs are disabled in production to prevent API enumeration.
+    docs_url  = "/docs" if ENV != "production" else None,
     redoc_url = None,
 )
 
@@ -70,42 +84,9 @@ app.include_router(tray_router)
 app.include_router(admin_router)
 app.include_router(analytics_router)
 app.include_router(export_router)
-app.include_router(dev_router)
 
-
-# ── Root + Health ─────────────────────────────────────────────────────────────
-
-@app.get("/")
-def root():
-    return {"message": "FIFO Traceability API v4.0", "status": "ok"}
-
-
-@app.get("/health")
-def health():
-    """Health check — verifies DB connectivity. Use for uptime monitoring."""
-    from database import SessionLocal
-    import sqlalchemy
-    try:
-        db = SessionLocal()
-        db.execute(sqlalchemy.text("SELECT 1"))
-        db.close()
-        return {"status": "healthy", "db": "ok", "version": "4.0.0"}
-    except Exception as e:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unhealthy", "db": str(e)},
-        )
-
-
-@app.get("/cache/stats")
-def cache_stats():
-    """
-    Cache hit/miss statistics for monitoring.
-    Only accessible in dev (docs are disabled in production).
-    """
-    from core.cache import pipeline_cache, stats_cache, stage_load_cache
-    return {
-        "pipeline": pipeline_cache.stats,
-        "stats":    stats_cache.stats,
-        "stage_load": stage_load_cache.stats,
-    }
+# FIX: dev_routes is ONLY registered outside of production.
+# In production (ENV=production) the /dev/* endpoints do not exist at all.
+if ENV != "production":
+    from api.dev_routes import router as dev_router
+    app.include_router(dev_router)

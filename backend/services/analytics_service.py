@@ -1,3 +1,18 @@
+"""
+services/analytics_service.py
+
+FIX APPLIED (2025-04):
+  detect_bottlenecks() was comparing Tray.last_updated to measure how long
+  a tray has been stuck at its current stage. This is incorrect — last_updated
+  is refreshed on every scan, so a tray that just arrived at a stage but had
+  many prior scans would appear as not stuck, while a tray that sat untouched
+  after its first-ever scan would be over-flagged.
+
+  FIX: Now uses Tray.stage_entered_at (set once when the tray transitions into
+  its current stage) — exactly mirroring the fix already applied in fifo_service.
+  Falls back to last_updated for legacy rows predating the migration (same
+  fallback strategy as fifo_service).
+"""
 from models import Tray, ScanEvent
 from core.stages import STAGE_STUCK_LIMITS
 from datetime import datetime
@@ -7,6 +22,10 @@ def detect_bottlenecks(db, tenant_id: str = "default") -> list:
     """
     Returns trays that have been sitting at their current stage longer than
     the defined threshold for that stage.
+
+    Uses stage_entered_at (not last_updated) for accurate elapsed-time
+    measurement. Falls back to last_updated for pre-migration rows where
+    stage_entered_at is NULL.
     """
     trays = db.query(Tray).filter(
         Tray.tenant_id == tenant_id,
@@ -19,9 +38,15 @@ def detect_bottlenecks(db, tenant_id: str = "default") -> list:
 
     for t in trays:
         limit = STAGE_STUCK_LIMITS.get(t.stage)
-        if not limit or not t.last_updated:
+        if not limit:
             continue
-        elapsed = (now - t.last_updated).total_seconds()
+
+        # Prefer stage_entered_at; fall back to last_updated for pre-migration rows.
+        arrival = t.stage_entered_at or t.last_updated
+        if not arrival:
+            continue
+
+        elapsed = (now - arrival).total_seconds()
         if elapsed > limit:
             bottlenecks.append({
                 "tray_id":       t.id,
