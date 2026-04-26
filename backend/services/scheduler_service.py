@@ -1,7 +1,6 @@
-
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -11,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mes.db")
 
-# ── Scheduler setup with persistent SQLAlchemy job store ────────────────────
-jobstores  = {"default": SQLAlchemyJobStore(url=DATABASE_URL, tablename="apscheduler_jobs")}
-executors  = {"default": ThreadPoolExecutor(max_workers=2)}
+# ── Scheduler setup with persistent SQLAlchemy job store ──────────────────────
+jobstores    = {"default": SQLAlchemyJobStore(url=DATABASE_URL, tablename="apscheduler_jobs")}
+executors    = {"default": ThreadPoolExecutor(max_workers=2)}
 job_defaults = {"coalesce": True, "max_instances": 1}
 
 scheduler = BackgroundScheduler(
@@ -24,7 +23,7 @@ scheduler = BackgroundScheduler(
 )
 
 
-# ── Stuck tray check (hourly) ────────────────────────────────────────────────
+# ── Stuck tray check (hourly) ──────────────────────────────────────────────────
 
 def _check_stuck_trays():
     """
@@ -50,7 +49,7 @@ def _check_stuck_trays():
                     continue
 
                 cooldown_hours = max(settings.stuck_hours * 2, 2)
-                cutoff         = datetime.utcnow() - timedelta(hours=cooldown_hours)
+                cutoff         = datetime.now(timezone.utc) - timedelta(hours=cooldown_hours)
 
                 all_stuck = detect_bottlenecks(db, tid)
 
@@ -61,20 +60,22 @@ def _check_stuck_trays():
                         Tray.tenant_id == tid,
                         Tray.id        == item["tray_id"],
                     ).first()
-                    if tray and (
-                        tray.last_stuck_alert_at is None
-                        or tray.last_stuck_alert_at < cutoff
-                    ):
-                        to_alert.append(item)
+                    if tray:
+                        alert_at = tray.last_stuck_alert_at
+                        # Normalise naive timestamps from pre-migration rows.
+                        if alert_at is not None and alert_at.tzinfo is None:
+                            alert_at = alert_at.replace(tzinfo=timezone.utc)
+                        if alert_at is None or alert_at < cutoff:
+                            to_alert.append(item)
 
                 if not to_alert:
-                    logger.debug(f"[{tid}] No new stuck trays to alert (all within cooldown)")
+                    logger.debug("[%s] No new stuck trays to alert (all within cooldown)", tid)
                     continue
 
                 send_stuck_alert(db, to_alert, settings.stuck_hours, tid)
 
                 # Stamp last_stuck_alert_at on alerted trays.
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 for item in to_alert:
                     tray = db.query(Tray).filter(
                         Tray.tenant_id == tid,
@@ -84,16 +85,16 @@ def _check_stuck_trays():
                         tray.last_stuck_alert_at = now
 
                 db.commit()
-                logger.info(f"[{tid}] Stuck alert sent — {len(to_alert)} trays")
+                logger.info("[%s] Stuck alert sent — %d trays", tid, len(to_alert))
 
         finally:
             db.close()
 
     except Exception as exc:
-        logger.error(f"_check_stuck_trays error: {exc}", exc_info=True)
+        logger.error("_check_stuck_trays error: %s", exc, exc_info=True)
 
 
-# ── Daily summary (runs every hour, fires when hour matches tenant pref) ──────
+# ── Daily summary (runs every hour, fires when hour matches tenant pref) ───────
 
 def _send_daily_summary():
     """
@@ -108,7 +109,7 @@ def _send_daily_summary():
         from services.email_service import send_daily_summary, get_email_settings
         from datetime import date
 
-        current_hour = datetime.utcnow().hour
+        current_hour = datetime.now(timezone.utc).hour
         db = SessionLocal()
         try:
             all_settings = db.query(EmailSettings).all()
@@ -147,16 +148,16 @@ def _send_daily_summary():
                 }
 
                 send_daily_summary(db, stats, tid)
-                logger.info(f"[{tid}] Daily summary sent (hour={current_hour})")
+                logger.info("[%s] Daily summary sent (hour=%d)", tid, current_hour)
 
         finally:
             db.close()
 
     except Exception as exc:
-        logger.error(f"_send_daily_summary error: {exc}", exc_info=True)
+        logger.error("_send_daily_summary error: %s", exc, exc_info=True)
 
 
-# ── Lifecycle ────────────────────────────────────────────────────────────────
+# ── Lifecycle ──────────────────────────────────────────────────────────────────
 
 def start_scheduler():
     """Start the background scheduler. Called on app startup."""

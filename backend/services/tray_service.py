@@ -1,15 +1,16 @@
+from datetime import datetime, timezone
+
 from models import Tray
 from services.fifo_service import check_fifo_violation
 from services.log_service import log_scan
 from services.pipeline_service import (
     get_stage_def, get_branch_options, is_split_enabled,
 )
-from datetime import datetime
 
 SPLIT_MARKER = "SPLIT"
 
 
-# ── Public entry point ──────────────────────────────────────────────────────
+# ── Public entry point ─────────────────────────────────────────────────────────
 
 def advance_tray(
     db,
@@ -33,27 +34,27 @@ def advance_tray(
     branch_options = get_branch_options(project_id, config)
     branch_stage   = branch_cfg.get("atStage") if branch_options else None
 
-    # ── Block: parent after split ───────────────────────────────────────────
+    # ── Block: parent after split ──────────────────────────────────────────────
     if tray.stage == SPLIT_MARKER:
         return {
             "error": "This tray has been split. Scan Part A or Part B QR codes.",
             "is_split_parent_blocked": True,
         }
 
-    # ── Block: already complete ─────────────────────────────────────────────
+    # ── Block: already complete ────────────────────────────────────────────────
     if tray.stage == "COMPLETE":
         return {"error": f"{tray.id} is already complete.", "already_done": True}
 
-    # ── FIFO check (warn + log, never block) ────────────────────────────────
+    # ── FIFO check (warn + log, never block) ───────────────────────────────────
     fifo     = check_fifo_violation(db, tray)
     fifo_vio = fifo["violation"]
 
-    # ── Intercept split trigger ─────────────────────────────────────────────
+    # ── Intercept split trigger ────────────────────────────────────────────────
     if split_stage and tray.stage == split_stage:
         return _split_tray(db, tray, operator, fifo_vio, fifo["older_trays"], config)
 
-    # ── Branch stage — operator must supply a choice ────────────────────────
-    now = datetime.utcnow()
+    # ── Branch stage — operator must supply a choice ───────────────────────────
+    now = datetime.now(timezone.utc)
     if branch_stage and tray.stage == branch_stage:
         valid_ids = [b["id"] for b in branch_options]
         if not next_stage_override or next_stage_override not in valid_ids:
@@ -68,7 +69,7 @@ def advance_tray(
     from_stage = tray.stage
     scan_note  = _build_scan_note(from_stage, next_stage_id, config)
 
-    # ── Write new state ─────────────────────────────────────────────────────
+    # ── Write new state ────────────────────────────────────────────────────────
     tray.stage            = next_stage_id
     tray.last_updated     = now
     tray.stage_entered_at = now
@@ -97,7 +98,7 @@ def advance_tray(
     }
 
 
-# ── Split helper ────────────────────────────────────────────────────────────
+# ── Split helper ───────────────────────────────────────────────────────────────
 
 def _split_tray(
     db, tray: Tray, operator: str,
@@ -106,7 +107,7 @@ def _split_tray(
     """Mark parent as SPLIT and create child trays A and B."""
     split_cfg    = config.get("split", {})
     resume_stage = split_cfg.get("resumeAtStage", "BAT_MOUNT")
-    now          = datetime.utcnow()
+    now          = datetime.now(timezone.utc)
     from_stage   = tray.stage
 
     tray.is_split_parent  = True
@@ -162,7 +163,7 @@ def _split_tray(
     }
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _build_scan_note(from_stage: str, to_stage: str, config: dict) -> str:
     for s in config.get("stages", []):

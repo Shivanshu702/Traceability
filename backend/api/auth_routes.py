@@ -1,19 +1,23 @@
+import hashlib
 import os
 import secrets
-import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models import User, PasswordResetToken
-from schemas import LoginIn, RegisterIn, ForgotPasswordRequestIn, ForgotPasswordConfirmIn
 from core.auth import (
-    hash_password, verify_password, create_token,
-    OPEN_REGISTRATION, TOKEN_TTL, COOKIE_NAME,
+    COOKIE_NAME,
+    OPEN_REGISTRATION,
+    TOKEN_TTL,
+    create_token,
+    hash_password,
+    verify_password,
 )
-from core.rate_limit import limiter, AUTH_LIMIT
+from core.rate_limit import AUTH_LIMIT, limiter
+from database import get_db
+from models import PasswordResetToken, User
+from schemas import ForgotPasswordConfirmIn, ForgotPasswordRequestIn, LoginIn, RegisterIn
 from services.audit_service import log_action
 
 router = APIRouter(tags=["auth"])
@@ -22,7 +26,7 @@ _RESET_TTL_MINUTES = 15
 
 _COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() != "false"
 
-# ── Tenant allowlist ──────────────────────────────────────────────────────────
+# ── Tenant allowlist ───────────────────────────────────────────────────────────
 _raw_tenants = os.getenv("ALLOWED_TENANTS", "").strip()
 ALLOWED_TENANTS = (
     {t.strip().upper() for t in _raw_tenants.split(",") if t.strip()}
@@ -58,7 +62,7 @@ def _get_email_for_user(user):
     return None
 
 
-# ── register ──────────────────────────────────────────────────────────────────
+# ── register ───────────────────────────────────────────────────────────────────
 
 @router.post("/register")
 @limiter.limit(AUTH_LIMIT)
@@ -84,7 +88,7 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
     return {"message": "User created", "role": user.role, "tenant_id": tenant_id}
 
 
-# ── login ─────────────────────────────────────────────────────────────────────
+# ── login ──────────────────────────────────────────────────────────────────────
 
 @router.post("/login")
 @limiter.limit(AUTH_LIMIT)
@@ -126,7 +130,7 @@ def login(
     }
 
 
-# ── logout ────────────────────────────────────────────────────────────────────
+# ── logout ─────────────────────────────────────────────────────────────────────
 
 @router.post("/logout")
 def logout(response: Response):
@@ -134,7 +138,7 @@ def logout(response: Response):
     return {"ok": True}
 
 
-# ── forgot-password / request ─────────────────────────────────────────────────
+# ── forgot-password / request ──────────────────────────────────────────────────
 
 @router.post("/forgot-password/request")
 @limiter.limit("5/minute")
@@ -143,8 +147,7 @@ def forgot_password_request(
     payload: ForgotPasswordRequestIn,
     db: Session = Depends(get_db),
 ):
-    username = payload.username.strip()
-
+    username  = payload.username.strip()
     tenant_id = _validate_tenant(payload.tenant_id or "default")
 
     user = db.query(User).filter(
@@ -162,7 +165,7 @@ def forgot_password_request(
         db.flush()
 
         raw_token, token_hash = _make_token()
-        expires_at = datetime.utcnow() + timedelta(minutes=_RESET_TTL_MINUTES)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=_RESET_TTL_MINUTES)
         db.add(PasswordResetToken(
             tenant_id  = tenant_id,
             username   = username,
@@ -179,7 +182,7 @@ def forgot_password_request(
     return {"message": "If that account exists, a password reset link has been sent."}
 
 
-# ── forgot-password / confirm ─────────────────────────────────────────────────
+# ── forgot-password / confirm ──────────────────────────────────────────────────
 
 @router.post("/forgot-password/confirm")
 @limiter.limit("10/minute")
@@ -199,7 +202,13 @@ def forgot_password_confirm(
 
     if not row:
         raise HTTPException(400, "Invalid or already-used reset token.")
-    if datetime.utcnow() > row.expires_at:
+
+    now = datetime.now(timezone.utc)
+    expires = row.expires_at
+    # Normalise naive timestamps stored before the migration.
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if now > expires:
         raise HTTPException(400, "Reset token has expired. Please request a new one.")
 
     user = db.query(User).filter(
@@ -215,34 +224,15 @@ def forgot_password_confirm(
     return {"message": "Password updated successfully."}
 
 
-# ── internal email helper ─────────────────────────────────────────────────────
+# ── Internal helper ────────────────────────────────────────────────────────────
 
-def _send_reset_email(db, user, email, raw_token, tenant_id):
+def _send_reset_email(db, user, email: str, raw_token: str, tenant_id: str):
+    """Fire-and-forget reset email.  Errors are logged, never raised."""
     try:
-        from services.email_service import get_email_settings, send_email
-        settings   = get_email_settings(db, tenant_id)
-        frontend   = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        reset_link = f"{frontend}/reset-password?token={raw_token}"
-        html_body  = f"""
-        <p>Hi <strong>{user.username}</strong>,</p>
-        <p>A password reset was requested for your account (<strong>{tenant_id}</strong>).
-           Click the button below to set a new password.
-           This link expires in <strong>{_RESET_TTL_MINUTES} minutes</strong>.</p>
-        <p style="margin:24px 0">
-          <a href="{reset_link}" style="background:#185FA5;color:#fff;padding:12px 24px;
-            border-radius:6px;text-decoration:none;font-weight:700">
-            Reset my password
-          </a>
-        </p>
-        <p style="font-size:12px;color:#6B7280">
-          If you didn't request this, ignore this email – your password won't change.
-        </p>
-        """
-        send_email(
-            settings, [email],
-            f"Reset your Traceability password ({tenant_id})",
-            f"<!DOCTYPE html><html><body>{html_body}</body></html>",
-        )
+        from services.email_service import send_password_reset_email
+        send_password_reset_email(db, user, email, raw_token, tenant_id)
     except Exception as exc:
         import logging
-        logging.getLogger(__name__).warning(f"Reset email failed for {user.username}: {exc}")
+        logging.getLogger(__name__).error(
+            "Failed to send password reset email to %s: %s", email, exc
+        )

@@ -6,7 +6,7 @@ gunicorn
 # Database
 sqlalchemy
 psycopg2-binary
-alembic                     # database migrations (new)
+alembic                     # database migrations
 
 # Auth / security
 python-jose[cryptography]
@@ -34,3 +34,6 @@ limits
 
 # Config
 python-dotenv
+
+# ── Shared cache ───────────────────────────────────────────────────────────────
+redis>=5.0.0

@@ -1,18 +1,20 @@
+from datetime import datetime, timezone
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
-from database import get_db
-from models import Tray, ScanEvent
-from schemas import TraysCreateIn, ScanIn, BulkScanIn, BulkDeleteIn
+
 from core.auth import get_current_user, require_admin, tenant
 from core.rate_limit import limiter, SCAN_LIMIT
-from services.tray_service import advance_tray, _tray_dict
+from database import get_db
+from models import ScanEvent, Tray
+from schemas import BulkDeleteIn, BulkScanIn, ScanIn, TraysCreateIn
 from services.audit_service import log_action
+from services.email_service import send_fifo_alert
 from services.pipeline_service import get_pipeline_config, get_units_for_project_cfg
 from services.qr_service import generate_qr_base64, generate_qr_bytes
-from services.email_service import send_fifo_alert
-from datetime import datetime
-from typing import Optional
+from services.tray_service import advance_tray, _tray_dict
 
 router = APIRouter(tags=["trays"])
 
@@ -32,7 +34,7 @@ def _event_dict(e: ScanEvent) -> dict:
     }
 
 
-# ── Tray CRUD ─────────────────────────────────────────────────────────────────
+# ── Tray CRUD ──────────────────────────────────────────────────────────────────
 
 @router.get("/trays")
 def get_all_trays(
@@ -60,7 +62,6 @@ def get_all_trays(
 
 
 @router.post("/trays/create")
-
 @limiter.limit("30/minute")
 def create_trays(
     request: Request,                              # required by slowapi
@@ -72,7 +73,7 @@ def create_trays(
     tid     = tenant(user)
     cfg     = get_pipeline_config(db, tid)
     created = []
-    now     = datetime.utcnow()
+    now     = datetime.now(timezone.utc)
 
     for t in payload.trays:
         tray_id = t.id
@@ -162,7 +163,6 @@ def delete_tray(
     if not tray:
         raise HTTPException(404, "Tray not found")
 
-
     db.query(ScanEvent).filter(
         ScanEvent.tenant_id == tid,
         ScanEvent.tray_id   == tray.id,
@@ -191,7 +191,8 @@ def bulk_delete_trays(
             Tray.tenant_id == tid, Tray.id == tray_id
         ).first()
         if not tray:
-            not_found.append(tray_id); continue
+            not_found.append(tray_id)
+            continue
         db.query(ScanEvent).filter(
             ScanEvent.tenant_id == tid, ScanEvent.tray_id == tray_id
         ).delete(synchronize_session=False)
@@ -208,7 +209,7 @@ def bulk_delete_trays(
     return {"ok": True, "deleted": len(deleted), "not_found": len(not_found), "ids": deleted}
 
 
-# ── Scan ──────────────────────────────────────────────────────────────────────
+# ── Scan ───────────────────────────────────────────────────────────────────────
 
 @router.post("/scan")
 @limiter.limit(SCAN_LIMIT)
@@ -283,7 +284,8 @@ def bulk_scan(
             tray = db.query(Tray).filter(Tray.tenant_id == tid, Tray.id == tray_id).first()
 
         if not tray:
-            results.append({"id": tray_id, "error": "Not found"}); continue
+            results.append({"id": tray_id, "error": "Not found"})
+            continue
 
         r = advance_tray(db, tray, user["sub"], payload.next_stage_override, cfg)
         db.commit()
@@ -295,7 +297,7 @@ def bulk_scan(
             "failed": len(results) - ok_n, "results": results}
 
 
-# ── History & logs ────────────────────────────────────────────────────────────
+# ── History & logs ─────────────────────────────────────────────────────────────
 
 @router.get("/history/{tray_id}")
 def get_history(
