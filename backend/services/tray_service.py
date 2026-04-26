@@ -1,4 +1,3 @@
-
 from models import Tray
 from services.fifo_service import check_fifo_violation
 from services.log_service import log_scan
@@ -19,17 +18,12 @@ def advance_tray(
     next_stage_override: str = None,
     config: dict = None,
 ) -> dict:
-    """Advance a tray one step in the pipeline.
 
-    IMPORTANT: The caller must acquire a row-level lock on the tray before
-    calling this function:
-        tray = db.query(Tray).filter(...).with_for_update().first()
-    This prevents race conditions when two operators scan the same tray
-    simultaneously.
-    """
     if config is None:
-        from services.pipeline_service import build_default_config
-        config = build_default_config()
+        raise ValueError(
+            "advance_tray() requires a pipeline config dict. "
+            "Call get_pipeline_config(db, tenant_id) before invoking this function."
+        )
 
     split_cfg      = config.get("split", {})
     branch_cfg     = config.get("branch", {})
@@ -77,7 +71,7 @@ def advance_tray(
     # ── Write new state ─────────────────────────────────────────────────────
     tray.stage            = next_stage_id
     tray.last_updated     = now
-    tray.stage_entered_at = now          # ← records when tray joined this station queue
+    tray.stage_entered_at = now
     tray.fifo_violated    = fifo_vio or tray.fifo_violated
 
     if next_stage_id == "COMPLETE":
@@ -138,7 +132,7 @@ def _split_tray(
             fifo_violated    = tray.fifo_violated,
             created_at       = tray.created_at,
             last_updated     = now,
-            stage_entered_at = now,   # child arrives at resume_stage right now
+            stage_entered_at = now,
         )
         db.add(child)
         log_scan(

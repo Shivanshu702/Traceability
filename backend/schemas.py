@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -87,6 +86,9 @@ class UserCreateIn(BaseModel):
     username: str = Field(..., min_length=1, max_length=80)
     password: str = Field(..., min_length=6)
     role:     Optional[str] = "operator"
+    # HIGH-2 FIX: added email so admin_create_user can accept it via the
+    # typed schema instead of reading it out of a bare dict.
+    email:    Optional[str] = None
 
 
 class UserRoleIn(BaseModel):
@@ -94,16 +96,13 @@ class UserRoleIn(BaseModel):
 
 
 # ── Admin – pipeline config ───────────────────────────────────────────────────
-#
-# FIX: These models replace the bare `dict` accepted by PUT /admin/pipeline-config.
-# Validation rules mirror what save_pipeline_config() and advance_tray() expect.
 
 class StageDef(BaseModel):
     """One step in the linear pipeline."""
     id:                 str           = Field(..., min_length=1, max_length=50)
     label:              str           = Field(..., min_length=1)
     color:              Optional[str] = "#888780"
-    next:               Optional[str] = None       # None for terminal stages
+    next:               Optional[str] = None
     scanNote:           Optional[str] = ""
     stuckLimitSeconds:  Optional[int] = Field(default=3600, ge=0)
 
@@ -114,7 +113,6 @@ class StageDef(BaseModel):
 
 
 class BranchOption(BaseModel):
-    """One branch choice at the branch stage (e.g. Robot vs Manual soldering)."""
     id:       str           = Field(..., min_length=1, max_length=50)
     label:    str           = Field(..., min_length=1)
     icon:     Optional[str] = ""
@@ -129,8 +127,8 @@ class BranchOption(BaseModel):
 
 
 class BranchConfig(BaseModel):
-    enabled: bool              = True
-    atStage: str               = Field(..., min_length=1)
+    enabled: bool               = True
+    atStage: str                = Field(..., min_length=1)
     options: List[BranchOption] = Field(..., min_length=1)
 
     @field_validator("atStage", mode="before")
@@ -170,10 +168,6 @@ class TrayIdConfig(BaseModel):
 class PipelineConfigIn(BaseModel):
     """
     Full pipeline configuration payload for PUT /admin/pipeline-config.
-
-    All stage IDs within `stages`, `split`, and `branch` must be consistent –
-    e.g. split.atStage must appear in stages, branch.atStage must appear in
-    stages, and branch option IDs must not clash with stage IDs.
     """
     tray:     Optional[TrayIdConfig] = None
     projects: Optional[List[ProjectDef]] = []
@@ -185,11 +179,9 @@ class PipelineConfigIn(BaseModel):
     def check_stage_references(self) -> "PipelineConfigIn":
         stage_ids = {s.id for s in self.stages}
 
-        # Duplicate stage IDs are illegal.
         if len(stage_ids) != len(self.stages):
             raise ValueError("stages contains duplicate IDs")
 
-        # split.atStage and split.resumeAtStage must be known stage IDs.
         if self.split and self.split.enabled:
             for field_name in ("atStage", "resumeAtStage"):
                 sid = getattr(self.split, field_name)
@@ -198,7 +190,6 @@ class PipelineConfigIn(BaseModel):
                         f"split.{field_name} '{sid}' is not a defined stage ID"
                     )
 
-        # branch.atStage must be a known stage ID.
         if self.branch and self.branch.enabled:
             if self.branch.atStage not in stage_ids:
                 raise ValueError(

@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -17,7 +16,6 @@ from typing import Optional
 
 router = APIRouter(tags=["trays"])
 
-# Maximum rows returned per page — prevents accidental full-table dumps.
 _MAX_PAGE_SIZE = 500
 
 
@@ -40,28 +38,18 @@ def _event_dict(e: ScanEvent) -> dict:
 def get_all_trays(
     stage:   Optional[str] = None,
     project: Optional[str] = None,
-    # Pagination — defaults to first 200 rows; max 500 per page.
     limit:   int           = Query(default=200, ge=1, le=_MAX_PAGE_SIZE),
     offset:  int           = Query(default=0,   ge=0),
     user:    dict          = Depends(get_current_user),
     db:      Session       = Depends(get_db),
 ):
-    """
-    Return trays for the authenticated tenant.
-
-    Pagination params:
-      limit  — rows per page (1–500, default 200)
-      offset — rows to skip  (default 0)
-
-    Response includes `total` so the client can calculate page count.
-    """
     tid = tenant(user)
     q   = db.query(Tray).filter(Tray.tenant_id == tid)
     if stage:   q = q.filter(Tray.stage   == stage)
     if project: q = q.filter(Tray.project == project)
 
-    total  = q.count()
-    trays  = q.order_by(Tray.created_at.desc()).offset(offset).limit(limit).all()
+    total = q.count()
+    trays = q.order_by(Tray.created_at.desc()).offset(offset).limit(limit).all()
 
     return {
         "total":  total,
@@ -72,7 +60,10 @@ def get_all_trays(
 
 
 @router.post("/trays/create")
+
+@limiter.limit("30/minute")
 def create_trays(
+    request: Request,                              # required by slowapi
     payload: TraysCreateIn,
     user:    dict    = Depends(get_current_user),
     db:      Session = Depends(get_db),
@@ -84,7 +75,7 @@ def create_trays(
     now     = datetime.utcnow()
 
     for t in payload.trays:
-        tray_id = t.id   # already uppercased by Pydantic validator
+        tray_id = t.id
         if db.query(Tray).filter(Tray.tenant_id == tid, Tray.id == tray_id).first():
             continue
 
@@ -170,6 +161,13 @@ def delete_tray(
     ).first()
     if not tray:
         raise HTTPException(404, "Tray not found")
+
+
+    db.query(ScanEvent).filter(
+        ScanEvent.tenant_id == tid,
+        ScanEvent.tray_id   == tray.id,
+    ).delete(synchronize_session=False)
+
     db.delete(tray)
     log_action(db, user["sub"], "DELETE_TRAY", tray_id, tid)
     db.commit()
@@ -246,7 +244,7 @@ def scan(
     )
 
     if result.get("ok"):
-        log_action(db, user["sub"], "SCAN", 
+        log_action(db, user["sub"], "SCAN",
                    f"{tray_id}:{result['from_stage']}→{result['to_stage']}", tid)
         stats_cache.invalidate_prefix(f"stats:{tid}")
         if result.get("fifo_vio") and result.get("older_trays"):

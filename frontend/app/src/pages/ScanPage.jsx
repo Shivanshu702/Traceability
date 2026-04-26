@@ -128,6 +128,7 @@ export default function ScanPage() {
     branchBtn: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: 16, borderRadius: 10, cursor: "pointer", marginBottom: 8, textAlign: "left", fontFamily: "inherit" },
   };
 
+
   return (
     <div style={S.container}>
       <h2 style={{ color: "var(--text)", marginBottom: 16, fontSize: 16, fontWeight: 700 }}>
@@ -191,7 +192,9 @@ export default function ScanPage() {
             <span style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "var(--text)" }}>
               {tray.id}
             </span>
-            {tray.parent_id && <span className="tag tag-amber">Part {tray.id.slice(-1)}</span>}
+
+
+            {tray.parent_id && <span className="tag tag-amber">Part {tray.id.endsWith("-A") ? "A" : tray.id.endsWith("-B") ? "B" : tray.id.slice(-1)}</span>}
             {tray.project   && <span className="tag tag-blue">{tray.project}</span>}
             {tray.shift     && <span className="tag tag-gray">{tray.shift}</span>}
           </div>
@@ -214,7 +217,7 @@ export default function ScanPage() {
           )}
           {isSplitParent && (
             <div className="warn-box">
-              ✂ {t("traySplit")} <strong>{tray.id}-A</strong> and <strong>{tray.id}-B</strong>. {t("scanEach")}
+              ✂ {t("traySplit")} <strong>{tray.id}-A</strong> {t("and")} <strong>{tray.id}-B</strong>. {t("scanEach")}
             </div>
           )}
           {isDone && (

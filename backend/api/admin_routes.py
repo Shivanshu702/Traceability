@@ -1,4 +1,3 @@
-
 import json as _json
 from datetime import datetime
 
@@ -7,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User, EmailSettings, RoleConfig
-from schemas import PipelineConfigIn
+from schemas import PipelineConfigIn, UserCreateIn           # HIGH-2 FIX: import UserCreateIn
 from core.auth import get_current_user, require_admin, hash_password, tenant
 from core.cache import pipeline_cache, stats_cache, stage_load_cache
 from services.audit_service import log_action
@@ -18,6 +17,7 @@ from services.email_service import get_email_settings, send_email
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+
 # ── Pipeline config ───────────────────────────────────────────────────────────
 
 @router.get("/pipeline-config")
@@ -27,24 +27,13 @@ def get_admin_pipeline_config(user: dict = Depends(require_admin), db: Session =
 
 @router.put("/pipeline-config")
 def update_pipeline_config(
-    payload: PipelineConfigIn,          # ← typed model replaces bare dict
+    payload: PipelineConfigIn,
     user:    dict    = Depends(require_admin),
     db:      Session = Depends(get_db),
 ):
-    """
-    Persist a new pipeline configuration for the authenticated tenant.
-
-    The payload is validated by PipelineConfigIn before this handler runs:
-      • stages list must be non-empty and have unique IDs
-      • split.atStage / split.resumeAtStage must reference defined stage IDs
-      • branch.atStage must reference a defined stage ID
-    A 422 is returned immediately if validation fails, with field-level detail.
-    """
-    tid  = tenant(user)
-    # Convert the validated Pydantic model back to a plain dict for the service
-    # layer (which expects the same JSON-serialisable shape it always has).
+    tid         = tenant(user)
     config_dict = payload.model_dump(exclude_none=False)
-    saved = save_pipeline_config(db, tid, config_dict)
+    saved       = save_pipeline_config(db, tid, config_dict)
     pipeline_cache.delete(f"pipeline:{tid}")
     log_action(db, user["sub"], "UPDATE_PIPELINE_CONFIG", "", tid)
     db.commit()
@@ -53,14 +42,15 @@ def update_pipeline_config(
 
 @router.post("/pipeline-config/reset")
 def reset_pipeline_config(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    # HIGH-6 FIX: single commit at the end — audit log and deletion are atomic.
     from models import PipelineConfig
     tid = tenant(user)
     row = db.query(PipelineConfig).filter(PipelineConfig.tenant_id == tid).first()
     if row:
-        db.delete(row); db.commit()
+        db.delete(row)
     pipeline_cache.delete(f"pipeline:{tid}")
     log_action(db, user["sub"], "RESET_PIPELINE_CONFIG", "", tid)
-    db.commit()
+    db.commit()                                              # ← single commit
     return {"ok": True, "config": build_default_config()}
 
 
@@ -76,15 +66,18 @@ def list_users(user: dict = Depends(require_admin), db: Session = Depends(get_db
 
 
 @router.post("/users")
-def admin_create_user(payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid   = tenant(user)
-    name  = (payload.get("username") or "").strip()
-    pw    = payload.get("password") or ""
-    role  = (payload.get("role") or "operator").strip()
-    email = (payload.get("email") or "").strip() or None
+def admin_create_user(
 
-    if not name or not pw:
-        raise HTTPException(400, "username and password required")
+    payload: UserCreateIn,
+    user:    dict    = Depends(require_admin),
+    db:      Session = Depends(get_db),
+):
+    tid   = tenant(user)
+    name  = payload.username.strip()
+    pw    = payload.password
+    role  = (payload.role or "operator").strip()
+    email = (payload.email or "").strip() or None     # email added to UserCreateIn (see schemas.py)
+
     if db.query(User).filter(User.tenant_id == tid, User.username == name).first():
         raise HTTPException(409, "User already exists")
 
@@ -166,19 +159,21 @@ def get_features(user: dict = Depends(require_admin)):
 @router.get("/roles")
 def list_roles(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
     rows = db.query(RoleConfig).filter(RoleConfig.tenant_id == tenant(user)).all()
-    return [{"name": r.name, "features": _json.loads(r.features or "[]")} for r in rows]
+    # CRIT-2 FIX: model column is `permissions`, not `features`.
+    return [{"name": r.name, "permissions": _json.loads(r.permissions or "[]")} for r in rows]
 
 
 @router.post("/roles")
 def create_role(payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid      = tenant(user)
-    name     = (payload.get("name") or "").strip()
-    features = payload.get("features", [])
+    tid         = tenant(user)
+    name        = (payload.get("name") or "").strip()
+    permissions = payload.get("permissions", [])
     if not name:
         raise HTTPException(400, "name required")
     if db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == name).first():
         raise HTTPException(409, "Role already exists")
-    row = RoleConfig(tenant_id=tid, name=name, features=_json.dumps(features))
+    # CRIT-2 FIX: use `permissions=` (the actual column name).
+    row = RoleConfig(tenant_id=tid, name=name, permissions=_json.dumps(permissions))
     db.add(row)
     log_action(db, user["sub"], "CREATE_ROLE", f"role={name}", tid)
     db.commit()
@@ -187,12 +182,13 @@ def create_role(payload: dict, user: dict = Depends(require_admin), db: Session 
 
 @router.put("/roles/{role_name}")
 def update_role(role_name: str, payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid  = tenant(user)
-    row  = db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == role_name).first()
+    tid = tenant(user)
+    row = db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == role_name).first()
     if not row:
         raise HTTPException(404, "Role not found")
-    if "features" in payload:
-        row.features = _json.dumps(payload["features"])
+    # CRIT-2 FIX: use `row.permissions` (the actual column name).
+    if "permissions" in payload:
+        row.permissions = _json.dumps(payload["permissions"])
     log_action(db, user["sub"], "UPDATE_ROLE", f"role={role_name}", tid)
     db.commit()
     return {"ok": True}
@@ -218,16 +214,28 @@ def get_email_settings_route(user: dict = Depends(require_admin), db: Session = 
 
 
 @router.put("/email-settings")
-def save_email_settings_route(payload: dict, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
+def save_email_settings_route(
+    payload: dict,
+    user:    dict    = Depends(require_admin),
+    db:      Session = Depends(get_db),
+):
     tid = tenant(user)
     row = db.query(EmailSettings).filter(EmailSettings.tenant_id == tid).first()
     if not row:
         row = EmailSettings(tenant_id=tid)
         db.add(row)
-    for field in ("api_key", "from_email", "from_name", "alert_emails",
-                  "daily_summary_hour", "send_stuck_alerts", "send_daily_summary"):
+
+
+    for field in (
+        "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_use_tls",
+        "from_email", "alert_recipients",
+        "stuck_alert_enabled", "stuck_hours",
+        "daily_summary_enabled", "daily_summary_hour",
+        "fifo_alert_enabled",
+    ):
         if field in payload:
             setattr(row, field, payload[field])
+
     log_action(db, user["sub"], "UPDATE_EMAIL_SETTINGS", "", tid)
     db.commit()
     return {"ok": True}
@@ -238,7 +246,7 @@ def send_test_email(user: dict = Depends(require_admin), db: Session = Depends(g
     tid      = tenant(user)
     settings = get_email_settings(db, tid)
     try:
-        send_email(settings, settings.get("alert_emails", []),
+        send_email(settings, settings.get("alert_recipients", []),
                    "Traceability – test email", "<p>Test email sent successfully.</p>")
         return {"ok": True}
     except Exception as exc:

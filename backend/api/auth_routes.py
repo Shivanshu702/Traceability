@@ -1,4 +1,3 @@
-
 import os
 import secrets
 import hashlib
@@ -21,8 +20,6 @@ router = APIRouter(tags=["auth"])
 
 _RESET_TTL_MINUTES = 15
 
-# Whether to set Secure flag on the auth cookie.
-# Set COOKIE_SECURE=false in .env when developing over plain HTTP.
 _COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() != "false"
 
 # ── Tenant allowlist ──────────────────────────────────────────────────────────
@@ -97,12 +94,6 @@ def login(
     payload:  LoginIn,
     db:       Session = Depends(get_db),
 ):
-    """
-    Authenticate and issue a session cookie.
-
-    The JWT is written as an HttpOnly cookie so it is never accessible
-    to JavaScript. The response body returns only display-safe fields.
-    """
     name      = payload.username.strip()
     raw_tid   = (payload.tenant_id or "default").strip()
     tenant_id = raw_tid.upper() if ALLOWED_TENANTS else "default"
@@ -113,21 +104,19 @@ def login(
 
     token = create_token(user)
 
-    # ── Set HttpOnly cookie ───────────────────────────────────────────────────
     response.set_cookie(
         key      = COOKIE_NAME,
         value    = token,
         httponly = True,
         secure   = _COOKIE_SECURE,
         samesite = "lax",
-        max_age  = TOKEN_TTL * 60,   # seconds
+        max_age  = TOKEN_TTL * 60,
         path     = "/",
     )
 
     log_action(db, name, "LOGIN", "", tenant_id)
     db.commit()
 
-    # Do NOT include the token in the JSON body.
     return {
         "ok":        True,
         "role":      user.role,
@@ -141,10 +130,6 @@ def login(
 
 @router.post("/logout")
 def logout(response: Response):
-    """
-    Clear the session cookie. No auth check needed – if the cookie is already
-    gone the browser simply sends nothing, and we return 200 either way.
-    """
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return {"ok": True}
 
@@ -158,8 +143,9 @@ def forgot_password_request(
     payload: ForgotPasswordRequestIn,
     db: Session = Depends(get_db),
 ):
-    username  = payload.username.strip()
-    tenant_id = (payload.tenant_id or "default").strip()
+    username = payload.username.strip()
+
+    tenant_id = _validate_tenant(payload.tenant_id or "default")
 
     user = db.query(User).filter(
         User.tenant_id == tenant_id, User.username == username
@@ -189,6 +175,7 @@ def forgot_password_request(
         if email:
             _send_reset_email(db, user, email, raw_token, tenant_id)
 
+    # Always return the same message — never reveal whether the account exists.
     return {"message": "If that account exists, a password reset link has been sent."}
 
 

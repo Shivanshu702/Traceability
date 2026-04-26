@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, UniqueConstraint
 from database import Base
 from datetime import datetime, timezone
 
@@ -47,11 +47,12 @@ class User(Base):
     username  = Column(String, index=True)
     password  = Column(String)
     role      = Column(String, default="operator")
-    # Email address for notifications and password reset.
-    # Separate from username so operators can have simple names like "garg"
-    # while still receiving reset emails at garg@lumel.com.
-    # Admin sets this when creating a user; users can update it themselves.
     email     = Column(String, nullable=True)
+
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "username", name="uq_users_tenant_username"),
+    )
 
 
 class PasswordResetToken(Base):
@@ -93,6 +94,8 @@ class EmailSettings(Base):
     id                    = Column(Integer, primary_key=True, index=True)
     tenant_id             = Column(String, unique=True, index=True, nullable=False)
     smtp_host             = Column(String, default="")
+    # MED-5 FIX: align default to 465 (SSL) — the migration had 587 but the
+    # model and email_service both assume 465 as the preferred port.
     smtp_port             = Column(Integer, default=465)
     smtp_user             = Column(String, default="")
     smtp_password         = Column(String, default="")
@@ -114,5 +117,5 @@ class RoleConfig(Base):
     tenant_id   = Column(String, index=True, nullable=False)
     name        = Column(String, nullable=False)
     label       = Column(String, default="")
-    permissions = Column(Text, default="[]")
+    permissions = Column(Text, default="[]")    # ← column is `permissions`, not `features`
     updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
