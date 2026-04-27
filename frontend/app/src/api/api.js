@@ -1,20 +1,25 @@
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
-function getToken() { return localStorage.getItem("token") || ""; }
-function authHeaders() {
-  return { "Content-Type": "application/json", Authorization: "Bearer " + getToken() };
-}
 
 async function req(method, path, body) {
-  const opts = { method, headers: authHeaders() };
+  const opts = {
+    method,
+    credentials: "include",                          // send the HttpOnly cookie cross-origin
+    headers: { "Content-Type": "application/json" },
+  };
   if (body !== undefined) opts.body = JSON.stringify(body);
+
   const res = await fetch(`${BASE}${path}`, opts);
+
   if (res.status === 401) {
-    ["token","role","username","tenant_id"]
-      .forEach(k => localStorage.removeItem(k));
-    window.location.reload();
-    return null; // return null, not {}
+
+    ["role", "username", "tenant_id"].forEach(k => localStorage.removeItem(k));
+    if (!window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+    return null;
   }
+
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -22,33 +27,48 @@ async function req(method, path, body) {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function loginUser(username, password, tenant_id = "default") {
   const res = await fetch(`${BASE}/login`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password, tenant_id }),
+    method:      "POST",
+    credentials: "include",                          // backend sets the cookie here
+    headers:     { "Content-Type": "application/json" },
+    body:        JSON.stringify({ username, password, tenant_id }),
   });
   return res.json();
+}
+
+export async function logoutUser() {
+  await fetch(`${BASE}/logout`, {
+    method:      "POST",
+    credentials: "include",                          // backend clears the cookie
+  });
+  ["role", "username", "tenant_id"].forEach(k => localStorage.removeItem(k));
 }
 
 export async function registerUser(username, password, role = "operator", tenant_id = "default") {
   const res = await fetch(`${BASE}/register`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password, role, tenant_id }),
+    method:      "POST",
+    credentials: "include",
+    headers:     { "Content-Type": "application/json" },
+    body:        JSON.stringify({ username, password, role, tenant_id }),
   });
   return res.json();
 }
 
-// Email-based password reset
 export async function forgotPasswordRequest(username, tenant_id = "default") {
   const res = await fetch(`${BASE}/forgot-password/request`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, tenant_id }),
+    method:      "POST",
+    credentials: "include",
+    headers:     { "Content-Type": "application/json" },
+    body:        JSON.stringify({ username, tenant_id }),
   });
   return res.json();
 }
 
 export async function forgotPasswordConfirm(token, new_password) {
   const res = await fetch(`${BASE}/forgot-password/confirm`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, new_password }),
+    method:      "POST",
+    credentials: "include",
+    headers:     { "Content-Type": "application/json" },
+    body:        JSON.stringify({ token, new_password }),
   });
   return res.json();
 }
@@ -62,7 +82,7 @@ export const resetPipelineConfig     = ()       => req("POST", "/admin/pipeline-
 // ── Trays ─────────────────────────────────────────────────────────────────────
 export async function getAllTrays(params = {}) {
   const data = await req("GET", "/trays?" + new URLSearchParams(params));
-  return Array.isArray(data) ? data : (data.trays ?? []);
+  return Array.isArray(data) ? data : (data?.trays ?? []);
 }
 
 export const getTray         = (id)    => req("GET",    `/tray/${id}`);
@@ -81,7 +101,7 @@ export const getHistory = (trayId) => req("GET", `/history/${trayId}`);
 
 export async function getScanLog(limit = 200) {
   const data = await req("GET", `/scan-log?limit=${limit}`);
-  return Array.isArray(data) ? data : (data.events ?? []);
+  return Array.isArray(data) ? data : (data?.events ?? []);
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
@@ -91,7 +111,7 @@ export const getAlerts    = () => req("GET", "/alerts");
 export const getStageLoad = () => req("GET", "/stage-load");
 export const getAnalytics = () => req("GET", "/analytics");
 
-// ── Operator + weekly analytics (new) ────────────────────────────────────────
+// ── Operator + weekly analytics ───────────────────────────────────────────────
 export const getOperatorStats = () => req("GET", "/analytics/operators");
 export const getWeeklyStats   = () => req("GET", "/analytics/weekly");
 
@@ -126,7 +146,7 @@ export function downloadScanLogCSV() { _dl("/export/scan-log", "scan_log.csv"); 
 export function downloadReportXLSX() { _dl("/export/report",   "production_report.xlsx"); }
 
 async function _dl(path, filename) {
-  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+  const res = await fetch(`${BASE}${path}`, { credentials: "include" });
   if (!res.ok) { alert("Export failed"); return; }
   const blob = await res.blob();
   const url  = URL.createObjectURL(blob);
