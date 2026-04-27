@@ -1,6 +1,4 @@
-
-
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -10,7 +8,6 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import { useState } from "react";
 
 import CreateTraysPage from "./pages/CreateTraysPage";
 import ScanPage        from "./pages/ScanPage";
@@ -21,9 +18,13 @@ import LoginPage       from "./pages/LoginPage";
 import AdminPage       from "./pages/AdminPage";
 import ManageTraysPage from "./pages/ManageTraysPage";
 import DevPage         from "./pages/DevPage";
+
+import { useTheme }           from "./context/ThemeContext";
+import { useLang, LANGUAGES } from "./context/LangContext";
+
 import "./App.css";
 
-// ── Auth-required wrapper ─────────────────────────────────────────────────────
+// ── Auth-required wrapper ──────────────────────────────────────────────────────
 function RequireAuth({ user, children }) {
   const location = useLocation();
   if (!user) {
@@ -32,7 +33,7 @@ function RequireAuth({ user, children }) {
   return children;
 }
 
-// ── Admin-only wrapper ────────────────────────────────────────────────────────
+// ── Admin-only wrapper ─────────────────────────────────────────────────────────
 function RequireAdmin({ user, children }) {
   if (!user || user.role !== "admin") {
     return <Navigate to="/" replace />;
@@ -40,86 +41,143 @@ function RequireAdmin({ user, children }) {
   return children;
 }
 
-// ── Inner app (has access to router hooks) ────────────────────────────────────
+// ── Inner app (has access to router + context hooks) ───────────────────────────
 function AppShell() {
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [user, setUser] = useState(null);
 
-  // Rehydrate session from cookie-backed user info stored in sessionStorage.
-  // Note: the JWT itself travels as an HttpOnly cookie (see auth fix) —
-  // only non-sensitive display fields (username, role, tenant_id) live here.
+  // Theme: dark / light toggle
+  const { theme, toggleTheme } = useTheme();
+
+  // Language: current lang + setter + full list
+  const { t, lang, setLang } = useLang();
+
+  // Rehydrate session from localStorage display fields.
+  // The JWT itself travels as an HttpOnly cookie — only non-sensitive
+  // display fields (username, role, tenant_id) live in localStorage.
   useEffect(() => {
-    const username  = sessionStorage.getItem("username");
-    const role      = sessionStorage.getItem("role");
-    const tenant_id = sessionStorage.getItem("tenant_id") || "default";
+    const username  = localStorage.getItem("username");
+    const role      = localStorage.getItem("role");
+    const tenant_id = localStorage.getItem("tenant_id") || "default";
     if (username) {
       setUser({ username, role: role || "operator", tenant_id });
     }
   }, []);
 
   function handleLogin(userData) {
-    // Persist display-only fields so a hard reload restores the shell UI.
-    sessionStorage.setItem("username",  userData.username);
-    sessionStorage.setItem("role",      userData.role);
-    sessionStorage.setItem("tenant_id", userData.tenant_id || "default");
+    localStorage.setItem("username",  userData.username);
+    localStorage.setItem("role",      userData.role);
+    localStorage.setItem("tenant_id", userData.tenant_id || "default");
     setUser(userData);
 
-    // If the user was redirected to /login from a protected route, send them back.
     const from = location.state?.from?.pathname || "/";
     navigate(from, { replace: true });
   }
 
   async function logout() {
-    // Tell the backend to clear the HttpOnly cookie.
     await fetch(
       `${import.meta.env.VITE_API_URL || "http://localhost:8001"}/logout`,
       { method: "POST", credentials: "include" },
     );
-    sessionStorage.clear();
+    localStorage.removeItem("username");
+    localStorage.removeItem("role");
+    localStorage.removeItem("tenant_id");
     setUser(null);
     navigate("/login", { replace: true });
   }
 
   const isAdmin = user?.role === "admin";
 
-  // ── Nav tabs ──────────────────────────────────────────────────────────────
+  // ── Nav tabs ───────────────────────────────────────────────────────────────
   const navTabs = [
-    { to: "/",        label: "📊 Dashboard" },
-    { to: "/scan",    label: "📷 Scan"      },
-    { to: "/history", label: "📋 History"   },
-    { to: "/create",  label: "➕ Create Trays" },
+    { to: "/",        label: `📊 ${t("dashboard")}` },
+    { to: "/scan",    label: `📷 ${t("scan")}`      },
+    { to: "/history", label: `📋 ${t("history")}`   },
+    { to: "/create",  label: `➕ ${t("createTrays")}` },
     ...(isAdmin ? [
-      { to: "/manage", label: "🗂 Manage Trays" },
-      { to: "/alerts", label: "🚨 Alerts"       },
-      { to: "/admin",  label: "⚙ Admin"         },
+      { to: "/manage", label: `🗂 ${t("manageTrays")}` },
+      { to: "/alerts", label: `🚨 ${t("alerts")}`      },
+      { to: "/admin",  label: `⚙ ${t("admin")}`        },
     ] : []),
   ];
 
-  // ── Routes ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="app">
       {user && (
         <>
           <header className="hdr">
+            {/* ── Brand ── */}
             <span className="hdr-title">⚙ Traceability System</span>
             <span className="hdr-sub">{user.username}</span>
             <span className="hdr-sub" style={{ color: "#9CA3AF", fontSize: 11 }}>
-              org: {user.tenant_id}
+              {t("org")}: {user.tenant_id}
             </span>
-            <span className="hdr-sub" style={{
-              background: isAdmin ? "rgba(226,75,74,.2)" : "transparent",
-              color: "#F09595",
-            }}>
+            <span
+              className="hdr-sub"
+              style={{
+                background: isAdmin ? "rgba(226,75,74,.2)" : "transparent",
+                color: "#F09595",
+              }}
+            >
               {user.role}
             </span>
-            <button
-              className="btn btn-red"
-              style={{ marginLeft: "auto", padding: "5px 14px", fontSize: 12 }}
-              onClick={logout}
-            >
-              Logout
-            </button>
+
+            {/* ── Controls ── */}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+
+              {/* Language selector */}
+              <select
+                value={lang}
+                onChange={e => setLang(e.target.value)}
+                title={t("language")}
+                style={{
+                  fontSize: 12,
+                  padding: "3px 6px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border, #374151)",
+                  background: "var(--card-bg, #1F2937)",
+                  color: "var(--text, #F9FAFB)",
+                  cursor: "pointer",
+                  maxWidth: 140,
+                }}
+              >
+                {LANGUAGES.map(({ code, label, flag }) => (
+                  <option key={code} value={code}>
+                    {flag} {label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Theme toggle */}
+              <button
+                onClick={toggleTheme}
+                title={theme === "dark" ? t("lightMode") : t("darkMode")}
+                style={{
+                  fontSize: 16,
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border, #374151)",
+                  background: "var(--card-bg, #1F2937)",
+                  color: "var(--text, #F9FAFB)",
+                  cursor: "pointer",
+                  lineHeight: 1.4,
+                }}
+              >
+                {theme === "dark" ? "☀️" : "🌙"}
+              </button>
+
+              {/* Logout */}
+              <button
+                className="btn btn-red"
+                style={{ padding: "5px 14px", fontSize: 12 }}
+                onClick={logout}
+              >
+                {t("logout")}
+              </button>
+            </div>
           </header>
 
           <nav className="nav">
@@ -127,7 +185,7 @@ function AppShell() {
               <NavLink
                 key={to}
                 to={to}
-                end={to === "/"}           /* exact match for root only */
+                end={to === "/"}
                 className={({ isActive }) => `nb${isActive ? " on" : ""}`}
               >
                 {label}
@@ -185,7 +243,7 @@ function AppShell() {
   );
 }
 
-// ── Root export (provides the router context) ─────────────────────────────────
+// ── Root export ────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <BrowserRouter>
