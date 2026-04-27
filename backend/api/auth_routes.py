@@ -113,7 +113,7 @@ def login(
         value    = token,
         httponly = True,
         secure   = _COOKIE_SECURE,
-        samesite = "lax",
+        samesite = "none",
         max_age  = TOKEN_TTL * 60,
         path     = "/",
     )
