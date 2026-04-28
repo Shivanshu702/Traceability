@@ -41,22 +41,17 @@ function RequireAdmin({ user, children }) {
   return children;
 }
 
-// ── Inner app (has access to router + context hooks) ───────────────────────────
+// ── Inner app ──────────────────────────────────────────────────────────────────
 function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
 
   const [user, setUser] = useState(null);
 
-  // Theme: dark / light toggle
   const { theme, toggleTheme } = useTheme();
+  const { t, lang, setLang }   = useLang();
 
-  // Language: current lang + setter + full list
-  const { t, lang, setLang } = useLang();
-
-  // Rehydrate session from localStorage display fields.
-  // The JWT itself travels as an HttpOnly cookie — only non-sensitive
-  // display fields (username, role, tenant_id) live in localStorage.
+  // Rehydrate session — JWT lives in HttpOnly cookie, display fields in localStorage
   useEffect(() => {
     const username  = localStorage.getItem("username");
     const role      = localStorage.getItem("role");
@@ -71,7 +66,6 @@ function AppShell() {
     localStorage.setItem("role",      userData.role);
     localStorage.setItem("tenant_id", userData.tenant_id || "default");
     setUser(userData);
-
     const from = location.state?.from?.pathname || "/";
     navigate(from, { replace: true });
   }
@@ -90,7 +84,6 @@ function AppShell() {
 
   const isAdmin = user?.role === "admin";
 
-  // ── Nav tabs ───────────────────────────────────────────────────────────────
   const navTabs = [
     { to: "/",        label: `📊 ${t("dashboard")}` },
     { to: "/scan",    label: `📷 ${t("scan")}`      },
@@ -103,46 +96,36 @@ function AppShell() {
     ] : []),
   ];
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="app">
       {user && (
         <>
           <header className="hdr">
-            {/* ── Brand ── */}
+            {/* Brand */}
             <span className="hdr-title">⚙ Traceability System</span>
             <span className="hdr-sub">{user.username}</span>
-            <span className="hdr-sub" style={{ color: "#9CA3AF", fontSize: 11 }}>
+            <span className="hdr-sub" style={{ fontSize: 11 }}>
               {t("org")}: {user.tenant_id}
             </span>
             <span
               className="hdr-sub"
               style={{
                 background: isAdmin ? "rgba(226,75,74,.2)" : "transparent",
-                color: "#F09595",
+                color: "var(--err-text)",
               }}
             >
               {user.role}
             </span>
 
-            {/* ── Controls ── */}
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Controls — CSS classes handle theming, no hardcoded colours */}
+            <div className="hdr-controls">
 
               {/* Language selector */}
               <select
+                className="lang-select"
                 value={lang}
                 onChange={e => setLang(e.target.value)}
                 title={t("language")}
-                style={{
-                  fontSize: 12,
-                  padding: "3px 6px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border, #374151)",
-                  background: "var(--card-bg, #1F2937)",
-                  color: "var(--text, #F9FAFB)",
-                  cursor: "pointer",
-                  maxWidth: 140,
-                }}
               >
                 {LANGUAGES.map(({ code, label, flag }) => (
                   <option key={code} value={code}>
@@ -153,20 +136,12 @@ function AppShell() {
 
               {/* Theme toggle */}
               <button
+                className="theme-toggle"
                 onClick={toggleTheme}
                 title={theme === "dark" ? t("lightMode") : t("darkMode")}
-                style={{
-                  fontSize: 16,
-                  padding: "3px 10px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border, #374151)",
-                  background: "var(--card-bg, #1F2937)",
-                  color: "var(--text, #F9FAFB)",
-                  cursor: "pointer",
-                  lineHeight: 1.4,
-                }}
               >
                 {theme === "dark" ? "☀️" : "🌙"}
+                {theme === "dark" ? t("lightMode") : t("darkMode")}
               </button>
 
               {/* Logout */}
@@ -197,10 +172,8 @@ function AppShell() {
 
       <main className="main">
         <Routes>
-          {/* Developer panel – no login, guarded by DEV_KEY on backend */}
           <Route path="/dev" element={<DevPage />} />
 
-          {/* Auth */}
           <Route
             path="/login"
             element={
@@ -210,7 +183,6 @@ function AppShell() {
             }
           />
 
-          {/* Protected routes */}
           <Route path="/" element={
             <RequireAuth user={user}><Dashboard /></RequireAuth>
           } />
@@ -224,7 +196,6 @@ function AppShell() {
             <RequireAuth user={user}><CreateTraysPage /></RequireAuth>
           } />
 
-          {/* Admin-only routes */}
           <Route path="/manage" element={
             <RequireAdmin user={user}><ManageTraysPage /></RequireAdmin>
           } />
@@ -235,7 +206,6 @@ function AppShell() {
             <RequireAdmin user={user}><AdminPage /></RequireAdmin>
           } />
 
-          {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -243,7 +213,6 @@ function AppShell() {
   );
 }
 
-// ── Root export ────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <BrowserRouter>
