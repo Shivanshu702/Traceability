@@ -1,3 +1,5 @@
+
+
 import { useState, useEffect } from "react";
 import { scanTray, getTray } from "../api/api";
 import QRScanner from "../components/QRScanner";

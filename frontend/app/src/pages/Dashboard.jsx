@@ -1,3 +1,5 @@
+
+
 import { useEffect, useState } from "react";
 import { getStats, getAllTrays, getPipeline, getScanLog } from "../api/api";
 
