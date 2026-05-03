@@ -1140,10 +1140,3 @@ function EToggle({ value, onChange }) {
 const card      = { background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:16, marginBottom:0 };
 const cardTitle = { fontSize:12, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:14 };
 const lbl       = { fontSize:11, color:"var(--muted)", fontWeight:600 };
-
-
-const btnBlue   = { padding:"9px 18px", background:"#185FA5", color:"#E6F1FB", border:"1px solid #185FA5", borderRadius:8, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" };
-const btnGray   = { padding:"9px 16px", background:"#162032", color:"#E8EFF8", border:"1px solid #1E2D42", borderRadius:8, fontSize:13, cursor:"pointer", fontFamily:"inherit" };
-const btnSm     = { padding:"5px 10px", borderRadius:6, fontSize:11, cursor:"pointer", fontFamily:"inherit", background:"#162032", color:"#E8EFF8", border:"1px solid #1E2D42" };
-const errBox    = { background:"rgba(163,45,45,.2)", border:"1px solid rgba(163,45,45,.5)", borderRadius:8, padding:12, color:"#F09595", fontSize:13, marginBottom:12 };
-const okBox     = { background:"rgba(59,109,17,.2)", border:"1px solid rgba(59,109,17,.4)", borderRadius:8, padding:12, color:"#97C459", fontSize:13, marginBottom:12 };

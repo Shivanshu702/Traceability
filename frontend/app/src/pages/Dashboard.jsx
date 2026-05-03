@@ -1,4 +1,4 @@
-
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\Dashboard.jsx //
 
 import { useEffect, useState } from "react";
 import { getStats, getAllTrays, getPipeline, getScanLog } from "../api/api";
@@ -67,11 +67,11 @@ function StatCard({ label, main, sub1, sub2, color, icon }) {
 
 // ── Pipeline stage card ────────────────────────────────────────────────────────
 function StageCard({ stage, count, units, totalTrays, onExpand }) {
-  const t   = THEME[stage.id] || THEME.CREATED;
-  const pct = totalTrays > 0 ? Math.round((count / totalTrays) * 100) : 0;
+  const theme = THEME[stage.id] || THEME.CREATED;
+  const pct   = totalTrays > 0 ? Math.round((count / totalTrays) * 100) : 0;
   return (
     <div style={{
-      background:t.bg, border:`1px solid ${t.border}`,
+      background:theme.bg, border:`1px solid ${theme.border}`,
       borderRadius:10, padding:"12px 12px 9px",
       minWidth:108, flex:"1 1 108px",
       display:"flex", flexDirection:"column", gap:3,
@@ -79,7 +79,7 @@ function StageCard({ stage, count, units, totalTrays, onExpand }) {
     }}>
       <div style={{
         position:"absolute", top:-14, right:-14, width:52, height:52,
-        borderRadius:"50%", background:t.accent+"1A", pointerEvents:"none",
+        borderRadius:"50%", background:theme.accent+"1A", pointerEvents:"none",
       }}/>
       {onExpand && (
         <button
@@ -87,16 +87,16 @@ function StageCard({ stage, count, units, totalTrays, onExpand }) {
           title="View branch breakdown"
           style={{
             position:"absolute", top:6, right:6,
-            background:t.accent+"22", border:`1px solid ${t.accent}44`,
+            background:theme.accent+"22", border:`1px solid ${theme.accent}44`,
             borderRadius:5, padding:"2px 4px", cursor:"pointer",
-            color:t.accent, display:"flex", alignItems:"center", zIndex:2,
+            color:theme.accent, display:"flex", alignItems:"center", zIndex:2,
           }}
         >
           {ICONS.expand}
         </button>
       )}
       <div style={{
-        fontSize:9, fontWeight:700, color:t.accent,
+        fontSize:9, fontWeight:700, color:theme.accent,
         textTransform:"uppercase", letterSpacing:".05em",
         overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
         marginBottom:3, paddingRight:onExpand ? 20 : 0,
@@ -104,20 +104,20 @@ function StageCard({ stage, count, units, totalTrays, onExpand }) {
         {stage.label}
       </div>
       <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
-        <span style={{ fontSize:26, fontWeight:700, color:t.accent, lineHeight:1 }}>{count}</span>
-        <span style={{ fontSize:10, color:t.accent+"77" }}>trays</span>
+        <span style={{ fontSize:26, fontWeight:700, color:theme.accent, lineHeight:1 }}>{count}</span>
+        <span style={{ fontSize:10, color:theme.accent+"77" }}>trays</span>
       </div>
       <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
-        <span style={{ fontSize:13, fontWeight:600, color:t.accent+"aa" }}>
+        <span style={{ fontSize:13, fontWeight:600, color:theme.accent+"aa" }}>
           {(units||0).toLocaleString()}
         </span>
-        <span style={{ fontSize:10, color:t.accent+"55" }}>units</span>
+        <span style={{ fontSize:10, color:theme.accent+"55" }}>units</span>
       </div>
       <div style={{ marginTop:7 }}>
-        <div style={{ height:2, background:t.accent+"1A", borderRadius:2, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:pct+"%", background:t.accent, borderRadius:2 }}/>
+        <div style={{ height:2, background:theme.accent+"1A", borderRadius:2, overflow:"hidden" }}>
+          <div style={{ height:"100%", width:pct+"%", background:theme.accent, borderRadius:2 }}/>
         </div>
-        <div style={{ fontSize:8, color:t.accent+"66", marginTop:2, textAlign:"right" }}>
+        <div style={{ fontSize:8, color:theme.accent+"66", marginTop:2, textAlign:"right" }}>
           {pct}%
         </div>
       </div>
@@ -267,30 +267,35 @@ function BranchModal({ stats, onClose }) {
 // ── Stage group (normal expandable list — same for all stages) ─────────────────
 function StageGroup({ stage, trays }) {
   const [open, setOpen] = useState(false);
-  const t          = THEME[stage.id] || THEME.CREATED;
-  const totalUnits = trays.reduce((s, t) => s + (t.total_units || 0), 0);
+
+  // FIX Bug D2: renamed `t` → `theme` to avoid shadowing by the reduce callback
+  // parameter below. Previously `const t = THEME[...]` was silently shadowed by
+  // `trays.reduce((s, t) => ...)`, which would have used the tray object as `t`
+  // inside the reducer if the two scopes ever merged.
+  const theme      = THEME[stage.id] || THEME.CREATED;
+  const totalUnits = trays.reduce((sum, tray) => sum + (tray.total_units || 0), 0);
 
   return (
     <div style={{
-      border:`1px solid ${t.border}`, borderLeft:`3px solid ${t.accent}`,
+      border:`1px solid ${theme.border}`, borderLeft:`3px solid ${theme.accent}`,
       borderRadius:10, marginBottom:8, overflow:"hidden",
     }}>
       <div onClick={() => setOpen(o => !o)} style={{
         display:"flex", alignItems:"center", gap:10,
-        padding:"11px 14px", cursor:"pointer", background:t.bg,
+        padding:"11px 14px", cursor:"pointer", background:theme.bg,
       }}>
         <span style={{ fontSize:13, fontWeight:600, flex:1, color:"#E8EFF8" }}>
           {stage.label}
         </span>
         <span style={{
-          background:t.accent+"2A", color:t.accent,
+          background:theme.accent+"2A", color:theme.accent,
           borderRadius:12, padding:"2px 9px", fontSize:11, fontWeight:700,
         }}>
           {trays.length} tray{trays.length !== 1 ? "s" : ""}
         </span>
         <span style={{
-          background:t.accent+"15", color:t.accent,
-          border:`1px solid ${t.accent}33`,
+          background:theme.accent+"15", color:theme.accent,
+          border:`1px solid ${theme.accent}33`,
           borderRadius:10, padding:"2px 9px", fontSize:11, fontWeight:600,
         }}>
           {totalUnits.toLocaleString()} units
@@ -412,23 +417,33 @@ function DonutChart({ data, size = 120 }) {
       No data
     </div>
   );
+
   const r = 44, cx = 50, cy = 50, circ = 2 * Math.PI * r;
-  let offset = 0;
+
+  // FIX Bug D3: was mutating `let offset` inside a map callback — a side-effectful
+  // pattern that works sequentially but is semantically wrong (map should be pure).
+  // Replaced with reduce to pre-compute each segment's cumulative start offset
+  // declaratively, making the rotation computation clean and explicit.
+  const segments = data.reduce((acc, d, i) => {
+    const prevCumulative = acc.length > 0 ? acc[acc.length - 1].cumulative : 0;
+    const pct = d.value / total;
+    acc.push({ ...d, pct, cumulative: prevCumulative + pct, index: i });
+    return acc;
+  }, []);
+
   return (
     <svg viewBox="0 0 100 100" width={size} height={size}>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1E2D42" strokeWidth={11}/>
-      {data.map((d, i) => {
-        const pct  = d.value / total;
-        const dash = pct * circ;
-        const rot  = offset * 360 - 90;
-        offset += pct;
+      {segments.map(seg => {
+        const dash = seg.pct * circ;
+        const rot  = (seg.cumulative - seg.pct) * 360 - 90;
         return (
-          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-            stroke={d.color || CHART_COLORS[i % CHART_COLORS.length]}
+          <circle key={seg.index} cx={cx} cy={cy} r={r} fill="none"
+            stroke={seg.color || CHART_COLORS[seg.index % CHART_COLORS.length]}
             strokeWidth={11}
             strokeDasharray={`${dash} ${circ - dash}`}
             transform={`rotate(${rot} ${cx} ${cy})`}>
-            <title>{d.name}: {d.value}</title>
+            <title>{seg.name}: {seg.value}</title>
           </circle>
         );
       })}
@@ -505,9 +520,14 @@ export default function Dashboard() {
   const [loading,         setLoading]         = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
   const [branchModal,     setBranchModal]     = useState(false);
+  // FIX Bug D1: added error state so API failures show a message instead of
+  // a blank screen. Previously catch() only called console.error, and the
+  // `if (!stats || !pipeline) return null` guard silently rendered nothing.
+  const [loadError,       setLoadError]       = useState("");
 
   async function load(project = selectedProject) {
     setLoading(true);
+    setLoadError("");
     try {
       const [s, t, p, log] = await Promise.all([
         getStats(project),
@@ -521,6 +541,10 @@ export default function Dashboard() {
       setScanLog(Array.isArray(log) ? log : []);
     } catch (e) {
       console.error("Dashboard load error:", e);
+      // SESSION_EXPIRED is already handled by req() which redirects to /login
+      if (e.message !== "SESSION_EXPIRED") {
+        setLoadError("Failed to load dashboard data. Please refresh.");
+      }
     } finally {
       setLoading(false);
     }
@@ -541,20 +565,40 @@ export default function Dashboard() {
       </div>
     );
   }
-  if (!stats || !pipeline) return null;
+
+  // FIX Bug D1: show an actionable error instead of a blank screen when the
+  // API failed and stats/pipeline were never populated.
+  if (!stats || !pipeline) {
+    return loadError
+      ? (
+        <div style={{ padding:40 }}>
+          <div className="err-box" style={{ maxWidth:480 }}>
+            ⚠ {loadError}
+            <button
+              className="btn btn-blue"
+              style={{ marginLeft:16, padding:"4px 14px", fontSize:12 }}
+              onClick={() => load(selectedProject)}
+            >
+              ↻ Retry
+            </button>
+          </div>
+        </div>
+      )
+      : null;
+  }
 
   const projects    = pipeline.projects || [];
   const stages      = pipeline.stages   || [];
 
   // Exclude SPLIT parent trays from all counts to prevent double-counting
-  const nonSplitTrays = trays.filter(t => t.stage !== "SPLIT");
-  const activeTrays   = nonSplitTrays.filter(t => t.stage !== "COMPLETE");
+  const nonSplitTrays = trays.filter(tray => tray.stage !== "SPLIT");
+  const activeTrays   = nonSplitTrays.filter(tray => tray.stage !== "COMPLETE");
 
   // Group active trays by stage
   const byStage = {};
-  activeTrays.forEach(t => {
-    byStage[t.stage] = byStage[t.stage] || [];
-    byStage[t.stage].push(t);
+  activeTrays.forEach(tray => {
+    byStage[tray.stage] = byStage[tray.stage] || [];
+    byStage[tray.stage].push(tray);
   });
 
   // BAT_MOUNT group merges BAT_MOUNT + BAT_SOL_R + BAT_SOL_M into one row
@@ -574,7 +618,7 @@ export default function Dashboard() {
 
   const total         = stats.total_active + stats.total_complete;
   const pct           = total > 0 ? Math.round((stats.total_complete / total) * 100) : 0;
-  const totalUnitsAll = nonSplitTrays.reduce((s, t) => s + (t.total_units || 0), 0);
+  const totalUnitsAll = nonSplitTrays.reduce((sum, tray) => sum + (tray.total_units || 0), 0);
   const totalScans    = scanLog.length;
   const fifoRate      = total > 0
     ? Math.round(((total - (stats.fifo_violated || 0)) / total) * 100)
@@ -602,13 +646,16 @@ export default function Dashboard() {
   const dailyData = Object.entries(dayMap).map(([date, scans]) => ({ date, scans }));
 
   const shiftMap = { Morning:0, Afternoon:0, Night:0 };
-  nonSplitTrays.forEach(t => { const sh = t.shift || "Morning"; if (sh in shiftMap) shiftMap[sh]++; });
+  nonSplitTrays.forEach(tray => {
+    const sh = tray.shift || "Morning";
+    if (sh in shiftMap) shiftMap[sh]++;
+  });
   const shiftData = Object.entries(shiftMap).map(([shift, count]) => ({ shift, count }));
 
   const projMap = {};
-  nonSplitTrays.forEach(t => {
-    if (!t.project) return;
-    projMap[t.project] = (projMap[t.project] || 0) + (t.total_units || 0);
+  nonSplitTrays.forEach(tray => {
+    if (!tray.project) return;
+    projMap[tray.project] = (projMap[tray.project] || 0) + (tray.total_units || 0);
   });
   const projData = Object.entries(projMap)
     .map(([project, units]) => ({ project, units }))
@@ -641,6 +688,13 @@ export default function Dashboard() {
           {loading ? <span className="spin"/> : "↻"} Refresh
         </button>
       </div>
+
+      {/* Inline error banner — shown after initial load if a refresh fails */}
+      {loadError && (
+        <div className="err-box" style={{ marginBottom:16 }}>
+          ⚠ {loadError}
+        </div>
+      )}
 
       {/* 6 KPI stat cards */}
       <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20 }}>

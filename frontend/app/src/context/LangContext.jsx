@@ -148,13 +148,15 @@ const translations = {
 
 };
 
-const LangContext = createContext();
-const RTL_LANGS = new Set(["ar"]);  // extend if Hebrew (he) etc. are added later
+const LangContext = createContext(null);
+
 
 export function LangProvider({ children }) {
   const [lang, setLang] = useState(
     () => localStorage.getItem("lang") || "en"
   );
+
+  const RTL_LANGS = new Set(["ar"]);  // extend if Hebrew (he) etc. are added later
 
   // ✅ Sync document direction whenever lang changes
   useEffect(() => {

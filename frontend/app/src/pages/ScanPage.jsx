@@ -5,12 +5,6 @@ import { scanTray, getTray } from "../api/api";
 import QRScanner from "../components/QRScanner";
 import { useLang } from "../context/LangContext";
 
-// FIX (minor): moved outside component — was recreated on every render
-const BRANCH_OPTIONS = [
-  { id: "BAT_SOL_R", label: "Battery Soldered by Robot", icon: "🤖" },
-  { id: "BAT_SOL_M", label: "Battery Soldered by Hand",  icon: "✋" },
-];
-
 export default function ScanPage() {
   const { t } = useLang();
 
@@ -25,6 +19,12 @@ export default function ScanPage() {
   const [branch,      setBranch]      = useState(null);
   const [success,     setSuccess]     = useState("");
   const [scanNote,    setScanNote]    = useState("");
+
+  // Defined outside component to avoid recreation on every render
+  const BRANCH_OPTIONS = [
+    { id: "BAT_SOL_R", label: "Battery Soldered by Robot", icon: "🤖" },
+    { id: "BAT_SOL_M", label: "Battery Soldered by Hand",  icon: "✋" },
+  ];
 
   // Auto-load pending QR scan from URL redirect
   useEffect(() => {
@@ -82,10 +82,10 @@ export default function ScanPage() {
       setTray(updatedTray);
       setBranch(null);
 
-      // FIX Bug 9: FIFO violation replaces the success banner entirely —
-      // showing both simultaneously was contradictory for the operator.
+      // FIX Bug 9: FIFO violation is the primary message — never show both success and error
       if (data.scan_note) setScanNote(data.scan_note);
       if (data.fifo_vio) {
+        // Tray did move, but surface the violation clearly as the only banner
         setError(
           `⚠ Moved to ${data.to_label || updatedTray.stage} — FIFO violation logged. ` +
           `Older trays were waiting: ${(data.older_trays || []).join(", ")}`
@@ -134,6 +134,7 @@ export default function ScanPage() {
     btnPrimary:{ flex: 1, padding: 10, borderRadius: 8, border: "none", background: "var(--accent-dk)", color: "#E6F1FB", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit" },
     branchBtn: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: 16, borderRadius: 10, cursor: "pointer", marginBottom: 8, textAlign: "left", fontFamily: "inherit" },
   };
+
 
   return (
     <div style={S.container}>
@@ -198,6 +199,7 @@ export default function ScanPage() {
             <span style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "var(--text)" }}>
               {tray.id}
             </span>
+
             {tray.parent_id && <span className="tag tag-amber">Part {tray.id.endsWith("-A") ? "A" : tray.id.endsWith("-B") ? "B" : tray.id.slice(-1)}</span>}
             {tray.project   && <span className="tag tag-blue">{tray.project}</span>}
             {tray.shift     && <span className="tag tag-gray">{tray.shift}</span>}
