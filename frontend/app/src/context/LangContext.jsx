@@ -148,6 +148,7 @@ const translations = {
 
 };
 
+const LangContext = createContext();
 const RTL_LANGS = new Set(["ar"]);  // extend if Hebrew (he) etc. are added later
 
 export function LangProvider({ children }) {
