@@ -1,3 +1,4 @@
+// C:\SHIVANSH\Traceability\frontend\app\src\api\api.js //
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
@@ -13,12 +14,11 @@ async function req(method, path, body) {
   const res = await fetch(`${BASE}${path}`, opts);
 
   if (res.status === 401) {
-
     ["role", "username", "tenant_id"].forEach(k => localStorage.removeItem(k));
     if (!window.location.pathname.startsWith("/login")) {
       window.location.href = "/login";
     }
-    return null;
+    throw new Error("SESSION_EXPIRED");
   }
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -141,14 +141,17 @@ export const sendTestEmail     = ()         => req("POST", "/admin/test-email");
 // ── Export ────────────────────────────────────────────────────────────────────
 export function downloadTraysCSV(filters = {}) {
   const qs = new URLSearchParams(filters).toString();
-  _dl(`/export/trays${qs ? "?" + qs : ""}`, "trays.csv");
+  return _dl(`/export/trays${qs ? "?" + qs : ""}`, "trays.csv");
 }
-export function downloadScanLogCSV() { _dl("/export/scan-log", "scan_log.csv"); }
-export function downloadReportXLSX() { _dl("/export/report",   "production_report.xlsx"); }
+export function downloadScanLogCSV() { return _dl("/export/scan-log", "scan_log.csv"); }
+export function downloadReportXLSX() { return _dl("/export/report",   "production_report.xlsx"); }
 
+// FIX Bug 13: throws an Error instead of calling alert(), which blocked the
+// JS event loop and was inconsistent with the rest of the app's error handling.
+// Callers (ExportTab) now catch and display the error inline.
 async function _dl(path, filename) {
   const res = await fetch(`${BASE}${path}`, { credentials: "include" });
-  if (!res.ok) { alert("Export failed"); return; }
+  if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
   const blob = await res.blob();
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");

@@ -1,7 +1,7 @@
-
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\LoginPage.jsx //
 
 import { useState } from "react";
-import { loginUser, registerUser } from "../api/api";
+import { loginUser, registerUser, forgotPasswordConfirm } from "../api/api";
 import { useLang } from "../context/LangContext";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
@@ -40,7 +40,6 @@ export default function LoginPage({ onLogin, Controls }) {
     try {
       const data = await loginUser(name, pw, tenantId.trim() || "default");
       if (data.error || data.detail) { setError("Invalid username or password."); return; }
-      localStorage.setItem("token",     data.access_token);
       localStorage.setItem("username",  data.username || name);
       localStorage.setItem("role",      data.role || "operator");
       localStorage.setItem("tenant_id", data.tenant_id || tenantId || "default");
@@ -69,19 +68,13 @@ export default function LoginPage({ onLogin, Controls }) {
 
   async function handleForgotPassword() {
     const name   = username.trim();
-    const tenant = tenantId.trim() || "default";
     if (!name)            { setError("Enter your username."); return; }
     if (!resetKey)        { setError("Enter the reset token."); return; }
     if (newPw.length < 6) { setError("New password must be ≥ 6 characters."); return; }
     if (newPw !== newPwConf) { setError("Passwords do not match."); return; }
     setLoading(true); setError(""); setSuccess("");
     try {
-      const res = await fetch(`${BASE}/reset-password`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ token: resetKey, new_password: newPw }),
-      });
-      const data = await res.json();
+      const data = await forgotPasswordConfirm(resetKey, newPw);
       if (data.error || data.detail) { setError(data.error || data.detail); return; }
       setSuccess("Password updated successfully. You can now log in.");
       switchMode("login");

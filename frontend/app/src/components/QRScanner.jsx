@@ -1,3 +1,5 @@
+// C:\SHIVANSH\Traceability\frontend\app\src\components\QRScanner.jsx //
+
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
@@ -6,10 +8,15 @@ import { Html5Qrcode } from "html5-qrcode";
  */
 export default function QRScanner({ onScan, continuousScan = false }) {
   const scannerRef = useRef(null);
+  const onScanRef       = useRef(onScan);
+  const continuousRef   = useRef(continuousScan);
   const [error,     setError]     = useState("");
   const [torchOn,   setTorchOn]   = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [scanning,  setScanning]  = useState(false);
+
+  useEffect(() => { onScanRef.current = onScan; }, [onScan]);
+  useEffect(() => { continuousRef.current = continuousScan; }, [continuousScan]);
 
   useEffect(() => {
     const scannerId = "qr-reader-" + Math.random().toString(36).slice(2);
@@ -26,8 +33,8 @@ export default function QRScanner({ onScan, continuousScan = false }) {
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: qrboxSize, height: qrboxSize } },
         (decodedText) => {
-          onScan(decodedText);
-          if (!continuousScan) {
+          onScanRef.current(decodedText);
+          if (!continuousRef.current) {
             scanner.stop().catch(() => {});
           }
         },
@@ -55,6 +62,7 @@ export default function QRScanner({ onScan, continuousScan = false }) {
       scanner.stop().catch(() => {});
     };
   }, []);
+
 
   async function toggleTorch() {
     if (!scannerRef.current) return;

@@ -1,4 +1,4 @@
-
+// C:\SHIVANSH\Traceability\frontend\app\src\App.jsx //
 
 import { useEffect, useState } from "react";
 import {
@@ -11,6 +11,8 @@ import {
   useLocation,
 } from "react-router-dom";
 
+import OperatorReportPage   from "./pages/OperatorReportPage";
+import PipelineConfigEditor from "./pages/PipelineConfigEditor";
 import CreateTraysPage from "./pages/CreateTraysPage";
 import ScanPage        from "./pages/ScanPage";
 import HistoryPage     from "./pages/HistoryPage";
@@ -92,11 +94,41 @@ function AppShell() {
     { to: "/history", label: `📋 ${t("history")}`   },
     { to: "/create",  label: `➕ ${t("createTrays")}` },
     ...(isAdmin ? [
-      { to: "/manage", label: `🗂 ${t("manageTrays")}` },
-      { to: "/alerts", label: `🚨 ${t("alerts")}`      },
-      { to: "/admin",  label: `⚙ ${t("admin")}`        },
+      { to: "/manage",          label: `🗂 ${t("manageTrays")}` },
+      { to: "/alerts",          label: `🚨 ${t("alerts")}`      },
+      { to: "/admin",           label: `⚙ ${t("admin")}`        },
+      { to: "/operator-report", label: `📊 Operator Report`      },
+      { to: "/pipeline-editor", label: `🔧 Pipeline Editor`      },
     ] : []),
   ];
+
+  // FIX Bug 11: LoginControls renders the theme + language controls.
+  // Defined inside AppShell so it closes over theme/lang state.
+  // Passed as the Controls prop to LoginPage so unauthenticated users
+  // can switch language and theme on the login screen.
+  function LoginControls() {
+    return (
+      <>
+        <select
+          className="lang-select"
+          value={lang}
+          onChange={e => setLang(e.target.value)}
+          title={t("language")}
+        >
+          {LANGUAGES.map(({ code, label, flag }) => (
+            <option key={code} value={code}>{flag} {label}</option>
+          ))}
+        </select>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          title={theme === "dark" ? t("lightMode") : t("darkMode")}
+        >
+          {theme === "dark" ? "☀️" : "🌙"}
+        </button>
+      </>
+    );
+  }
 
   return (
     <div className="app">
@@ -174,14 +206,20 @@ function AppShell() {
 
       <main className="main">
         <Routes>
-          <Route path="/dev" element={<DevPage />} />
+          {/* FIX Bug 8: /dev was fully public — any unauthenticated visitor
+              could reach it. Now requires admin role like all sensitive routes. */}
+          <Route path="/dev" element={
+            <RequireAdmin user={user}><DevPage /></RequireAdmin>
+          } />
 
           <Route
             path="/login"
             element={
               user
                 ? <Navigate to="/" replace />
-                : <LoginPage onLogin={handleLogin} />
+                // FIX Bug 11: pass LoginControls so theme/lang toggles appear
+                // on the login screen for unauthenticated users.
+                : <LoginPage onLogin={handleLogin} Controls={LoginControls} />
             }
           />
 
@@ -197,7 +235,12 @@ function AppShell() {
           <Route path="/create" element={
             <RequireAuth user={user}><CreateTraysPage /></RequireAuth>
           } />
-
+          <Route path="/operator-report" element={
+            <RequireAdmin user={user}><OperatorReportPage /></RequireAdmin>
+          } />
+          <Route path="/pipeline-editor" element={
+            <RequireAdmin user={user}><PipelineConfigEditor /></RequireAdmin>
+          } />
           <Route path="/manage" element={
             <RequireAdmin user={user}><ManageTraysPage /></RequireAdmin>
           } />

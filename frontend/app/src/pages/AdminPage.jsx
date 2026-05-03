@@ -1,4 +1,7 @@
-import { useState, useEffect } from "react";
+
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\AdminPage.jsx //
+ 
+import React, { useState, useEffect } from "react";
 import {
   getAdminPipelineConfig, saveAdminPipelineConfig, resetPipelineConfig,
   getEmailSettings, saveEmailSettings, sendTestEmail,
@@ -8,11 +11,11 @@ import {
   getAuditLog,
 } from "../api/api";
 import { useLang } from "../context/LangContext";
-
+ 
 export default function AdminPage() {
   const { t } = useLang();
   const [tab, setTab] = useState("users");
-
+ 
   const TABS = [
     { key:"users",    label:`👥 ${t("users")}` },
     { key:"roles",    label:"🔑 Roles & Permissions" },
@@ -21,7 +24,7 @@ export default function AdminPage() {
     { key:"export",   label:`⬇ ${t("export")}` },
     { key:"audit",    label:"📋 Audit Log" },
   ];
-
+ 
   return (
     <div style={{ maxWidth:960, margin:"0 auto" }}>
       <h2 style={{ color:"var(--text)", marginBottom:20 }}>⚙ {t("admin")} Panel</h2>
@@ -41,7 +44,7 @@ export default function AdminPage() {
     </div>
   );
 }
-
+ 
 // ── Users tab ──────────────────────────────────────────────────────────────────
 function UsersTab() {
   const { t } = useLang();
@@ -56,50 +59,77 @@ function UsersTab() {
   const [resetTarget, setResetTarget] = useState(null);
   const [resetPw,     setResetPw]     = useState("");
   const [resetMsg,    setResetMsg]    = useState("");
-
+ 
   async function load() {
     setLoading(true);
-    const [u, r] = await Promise.all([listUsers(), listRoles()]);
-    setUsers(Array.isArray(u) ? u : []);
-    setRoles(Array.isArray(r) ? r : []);
-    setLoading(false);
+    try {
+      const [u, r] = await Promise.all([listUsers(), listRoles()]);
+      setUsers(Array.isArray(u) ? u : []);
+      setRoles(Array.isArray(r) ? r : []);
+    } catch (err) {
+      setError(err.message || "Failed to load users");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
-
+ 
   const allRoles = [
     { name:"admin",    label:"Admin" },
     { name:"operator", label:"Operator" },
     ...roles.map(r => ({ name:r.name, label:r.label||r.name })),
   ];
-
+ 
   async function handleCreate() {
     if (!newName.trim() || !newPw.trim()) { setError("Name and password required"); return; }
     setError(""); setMsg("");
-    const res = await adminCreateUser(newName.trim(), newPw.trim(), newRole);
-    if (res.error || !res.ok) { setError(res.error || "Failed to create user"); return; }
-    setMsg(`✅ User "${newName}" created with role: ${newRole}`);
-    setNewName(""); setNewPw(""); setNewRole("operator");
-    load();
+    try {
+      const res = await adminCreateUser(newName.trim(), newPw.trim(), newRole);
+      // FIX Bug 3b: was `!res?.detail` (inverted — triggered on every success).
+      // Correct check: only show error when error/detail fields are present.
+      if (res?.error || res?.detail) { setError(res.error || res.detail || "Failed to create user"); return; }
+      setMsg(`✅ User "${newName}" created with role: ${newRole}`);
+      setNewName(""); setNewPw(""); setNewRole("operator");
+      load();
+    } catch (err) {
+      setError(err.message || "Failed to create user");
+    }
   }
-
-  async function handleRoleChange(username, role) { await changeUserRole(username, role); load(); }
-
+ 
+  async function handleRoleChange(username, role) {
+    try {
+      await changeUserRole(username, role);
+      load();
+    } catch (err) {
+      setError(err.message || "Failed to update user role");
+    }
+  }
+ 
   async function handleDelete(username) {
     if (!confirm(`Permanently delete user "${username}"?`)) return;
-    const res = await deleteUser(username);
-    if (res.ok) { setMsg(`✅ User "${username}" deleted`); load(); }
-    else setError(res.detail || "Delete failed");
+    try {
+      const res = await deleteUser(username);
+      if (res?.error || res?.detail) { setError(res.detail || "Delete failed"); return; }
+      setMsg(`✅ User "${username}" deleted`);
+      load();
+    } catch (err) {
+      setError(err.message || "Delete failed");
+    }
   }
-
+ 
   async function handleResetPassword() {
     if (!resetPw || resetPw.length < 6) { setResetMsg("Min 6 characters"); return; }
-    const res = await adminResetPassword(resetTarget, resetPw);
-    if (res.ok) { setResetMsg("✅ Password updated"); setResetPw(""); }
-    else setResetMsg("Failed — try again");
+    try {
+      const res = await adminResetPassword(resetTarget, resetPw);
+      if (res?.error || res?.detail) { setResetMsg(res.error || res.detail || "Failed"); return; }
+      setResetMsg("✅ Password updated"); setResetPw("");
+    } catch (err) {
+      setResetMsg(err.message || "Failed — try again");
+    }
   }
-
+ 
   const currentUser = localStorage.getItem("username");
-
+ 
   return (
     <div>
       {/* Reset password modal */}
@@ -125,7 +155,7 @@ function UsersTab() {
           </div>
         </div>
       )}
-
+ 
       <div style={card}>
         <div style={cardTitle}>Create New User</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
@@ -148,7 +178,7 @@ function UsersTab() {
         {msg   && <div className="ok-box">{msg}</div>}
         <button className="btn btn-blue" onClick={handleCreate}>➕ {t("addUser")}</button>
       </div>
-
+ 
       <div style={{ ...card, padding:0, overflow:"hidden" }}>
         <div style={{ ...cardTitle, padding:"14px 16px 0" }}>All Users ({users.length})</div>
         {loading ? <Spin /> : (
@@ -196,7 +226,7 @@ function UsersTab() {
     </div>
   );
 }
-
+ 
 // ── Roles tab ──────────────────────────────────────────────────────────────────
 function RolesTab() {
   const { t } = useLang();
@@ -209,42 +239,56 @@ function RolesTab() {
   const [newPerms, setNewPerms] = useState([]);
   const [msg,      setMsg]      = useState("");
   const [error,    setError]    = useState("");
-
+ 
   async function load() {
     setLoading(true);
-    const [r, f] = await Promise.all([listRoles(), getFeatures()]);
-    setRoles(Array.isArray(r) ? r : []);
-    setFeatures(f?.features || []);
-    setLoading(false);
+    try {
+      const [r, f] = await Promise.all([listRoles(), getFeatures()]);
+      setRoles(Array.isArray(r) ? r : []);
+      setFeatures(f?.features || []);
+    } catch (err) {
+      setError(err.message || "Failed to load roles");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
-
+ 
+  // FIX Bug 3c: all three handlers now have try/catch.
+  // res.ok was being checked on a parsed JSON object where .ok is always
+  // undefined — replaced with checking backend error/detail fields directly.
   async function handleCreate() {
     if (!newName.trim()) { setError("Role name required"); return; }
     setError(""); setMsg("");
-    const res = await createRole({ name:newName, label:newLabel||newName, permissions:newPerms });
-    if (res.error || !res.ok) { setError(res.error||"Failed"); return; }
-    setMsg(`✅ Role "${newLabel||newName}" created`);
-    setNewName(""); setNewLabel(""); setNewPerms([]);
-    load();
+    try {
+      const res = await createRole({ name:newName, label:newLabel||newName, permissions:newPerms });
+      if (res?.error || res?.detail) { setError(res.error || res.detail || "Failed"); return; }
+      setMsg(`✅ Role "${newLabel||newName}" created`);
+      setNewName(""); setNewLabel(""); setNewPerms([]);
+      load();
+    } catch (err) { setError(err.message || "Failed to create role"); }
   }
-
+ 
   async function handleSave(role) {
-    const res = await updateRole(role.name, { label:role.label, permissions:role.permissions });
-    if (res.ok) { setMsg(`✅ Role "${role.label}" updated`); setEditing(null); load(); }
-    else setError("Failed to save");
+    try {
+      const res = await updateRole(role.name, { label:role.label, permissions:role.permissions });
+      if (res?.error || res?.detail) { setError(res.error || res.detail || "Failed to save"); return; }
+      setMsg(`✅ Role "${role.label}" updated`); setEditing(null); load();
+    } catch (err) { setError(err.message || "Failed to save"); }
   }
-
+ 
   async function handleDelete(name) {
     if (!confirm(`Delete role "${name}"?`)) return;
-    const res = await deleteRole(name);
-    if (res.ok) { setMsg("✅ Role deleted"); load(); }
-    else setError("Delete failed");
+    try {
+      const res = await deleteRole(name);
+      if (res?.error || res?.detail) { setError(res.error || res.detail || "Delete failed"); return; }
+      setMsg("✅ Role deleted"); load();
+    } catch (err) { setError(err.message || "Delete failed"); }
   }
-
+ 
   const permToggle = (perms, key) =>
     perms.includes(key) ? perms.filter(k => k!==key) : [...perms, key];
-
+ 
   return (
     <div>
       <div style={{ ...card, marginBottom:16 }}>
@@ -265,7 +309,7 @@ function RolesTab() {
           ))}
         </div>
       </div>
-
+ 
       <div style={card}>
         <div style={cardTitle}>Create Custom Role</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
@@ -286,7 +330,7 @@ function RolesTab() {
         {msg   && <div className="ok-box">{msg}</div>}
         <button className="btn btn-blue" onClick={handleCreate}>Create {t("role")}</button>
       </div>
-
+ 
       {loading ? <Spin /> : roles.length===0 ? (
         <div style={{ color:"var(--muted)", textAlign:"center", padding:32 }}>No custom roles yet.</div>
       ) : roles.map(role => {
@@ -327,7 +371,7 @@ function RolesTab() {
     </div>
   );
 }
-
+ 
 function PermGrid({ features, perms, onChange }) {
   return (
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px,1fr))", gap:8, marginTop:8, marginBottom:14 }}>
@@ -346,7 +390,7 @@ function PermGrid({ features, perms, onChange }) {
     </div>
   );
 }
-
+ 
 // ── Email tab ──────────────────────────────────────────────────────────────────
 function EmailTab() {
   const { t } = useLang();
@@ -355,26 +399,48 @@ function EmailTab() {
   const [saving,   setSaving]   = useState(false);
   const [msg,      setMsg]      = useState("");
   const [error,    setError]    = useState("");
-
-  useEffect(() => { getEmailSettings().then(d => { setSettings(d); setLoading(false); }); }, []);
+ 
+  useEffect(() => {
+    getEmailSettings()
+      .then(d => { setSettings(d); setLoading(false); })
+      // FIX Bug 7: if 401 throws SESSION_EXPIRED, suppress the error message
+      // because the redirect already handles it. Any other error is shown.
+      .catch(err => {
+        if (err.message !== "SESSION_EXPIRED") setError("Failed to load email settings.");
+        setLoading(false);
+      });
+  }, []);
+ 
   function upd(k, v) { setSettings(s => ({...s, [k]:v})); }
-
+ 
+  // FIX Bug 3d: added try/catch; replaced res.ok check (meaningless on a JSON
+  // object) with res?.error / res?.detail pattern used everywhere else.
   async function save() {
     setSaving(true); setMsg(""); setError("");
-    const res = await saveEmailSettings(settings);
-    setSaving(false);
-    if (res.ok) setMsg(`✅ ${t("save")}d`); else setError("Failed to save");
+    try {
+      const res = await saveEmailSettings(settings);
+      if (res?.error || res?.detail) { setError(res.error || res.detail || "Failed to save"); return; }
+      setMsg(`✅ ${t("save")}d`);
+    } catch (err) {
+      setError(err.message || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
   }
-
+ 
   async function testEmail() {
     setMsg("Sending…"); setError("");
-    const res = await sendTestEmail();
-    if (res.ok) setMsg(`✅ Test email sent to: ${res.sent_to?.join(", ")}`);
-    else setError(res.error || "Failed");
+    try {
+      const res = await sendTestEmail();
+      if (res?.error || res?.detail) { setError(res.error || res.detail || "Failed"); setMsg(""); return; }
+      setMsg(`✅ Test email sent to: ${res.sent_to?.join(", ")}`);
+    } catch (err) {
+      setError(err.message || "Failed"); setMsg("");
+    }
   }
-
+ 
   if (loading || !settings) return <Spin />;
-
+ 
   return (
     <div style={{ display:"grid", gap:16 }}>
       <div style={card}>
@@ -395,7 +461,7 @@ function EmailTab() {
           <input className="inp" value={settings.alert_recipients} onChange={e => upd("alert_recipients", e.target.value)} />
         </Fld>
       </div>
-
+ 
       <div style={card}>
         <div style={cardTitle}>Notification {t("settings")}</div>
         <Grid>
@@ -406,7 +472,7 @@ function EmailTab() {
           <Fld label="Summary Hour (UTC 0–23)"><input className="inp" type="number" min={0} max={23} value={settings.daily_summary_hour} onChange={e => upd("daily_summary_hour", +e.target.value)} /></Fld>
         </Grid>
       </div>
-
+ 
       {error && <div className="err-box">{error}</div>}
       {msg   && <div className="ok-box">{msg}</div>}
       <div style={{ display:"flex", gap:10 }}>
@@ -416,10 +482,10 @@ function EmailTab() {
     </div>
   );
 }
-
+ 
 // ── Pipeline tab ───────────────────────────────────────────────────────────────
 const PALETTE = ["#378ADD","#7F77DD","#EF9F27","#E24B4A","#5DCAA5","#D4537E","#BA7517","#185FA5","#3B6D11","#888780","#9B59B6","#E67E22","#1ABC9C","#E74C3C","#2ECC71"];
-
+ 
 function ColorPicker({ value, onChange }) {
   return (
     <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:4 }}>
@@ -430,7 +496,7 @@ function ColorPicker({ value, onChange }) {
     </div>
   );
 }
-
+ 
 function PToggle({ value, onChange }) {
   return (
     <div onClick={() => onChange(!value)} style={{ width:40, height:22, borderRadius:11, cursor:"pointer", background:value?"var(--accent-dk)":"var(--border)", position:"relative", transition:"background .2s", flexShrink:0 }}>
@@ -438,11 +504,11 @@ function PToggle({ value, onChange }) {
     </div>
   );
 }
-
+ 
 function rebuildNext(stages) {
   return stages.map((s,i) => ({...s, next:i<stages.length-1?stages[i+1].id:null}));
 }
-
+ 
 // Pipeline sub-styles — all CSS variables
 const PS = {
   card:    { background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"18px 20px", marginBottom:14 },
@@ -456,7 +522,7 @@ const PS = {
   secTitle:{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:14 },
   tag:     (col) => ({ background:col+"22", color:col, borderRadius:5, padding:"2px 9px", fontSize:11, fontWeight:700, display:"inline-block" }),
 };
-
+ 
 function StageInlineEditor({ stage, onSave, onCancel }) {
   const [form, setForm] = useState({...stage});
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -483,13 +549,13 @@ function StageInlineEditor({ stage, onSave, onCancel }) {
     </div>
   );
 }
-
+ 
 function PipelineStagesTab({ config, setConfig }) {
   const [editing, setEditing] = useState(null);
   const [adding,  setAdding]  = useState(false);
   const [newStage, setNewStage] = useState({ id:"", label:"", color:"#378ADD", scanNote:"", stuckLimitSeconds:3600 });
   const stages = config.stages || [];
-
+ 
   function move(idx, dir) {
     const arr = [...stages]; const swap=idx+dir;
     if (swap<0||swap>=arr.length) return;
@@ -506,7 +572,7 @@ function PipelineStagesTab({ config, setConfig }) {
     setNewStage({id:"",label:"",color:"#378ADD",scanNote:"",stuckLimitSeconds:3600});
     setAdding(false);
   }
-
+ 
   return (
     <div>
       <div style={{...PS.card,padding:"12px 16px",marginBottom:16}}>
@@ -565,13 +631,13 @@ function PipelineStagesTab({ config, setConfig }) {
     </div>
   );
 }
-
+ 
 function PipelineProjectsTab({ config, setConfig }) {
   const [editing, setEditing] = useState(null);
   const [adding,  setAdding]  = useState(false);
   const [newProj, setNewProj] = useState({ id:"", label:"", panels:50, unitsPerPanel:9 });
   const projects = config.projects || [];
-
+ 
   function saveProject(updated) {
     const p={...updated,unitsPerTray:updated.panels*updated.unitsPerPanel};
     setConfig(c=>({...c,projects:c.projects.map(x=>x.id===p.id?p:x)}));
@@ -589,7 +655,7 @@ function PipelineProjectsTab({ config, setConfig }) {
     setNewProj({id:"",label:"",panels:50,unitsPerPanel:9});
     setAdding(false);
   }
-
+ 
   return (
     <div>
       <div style={{ overflowX:"auto", marginBottom:16 }}>
@@ -602,9 +668,11 @@ function PipelineProjectsTab({ config, setConfig }) {
             </tr>
           </thead>
           <tbody>
+            {/* FIX Bug 4: was <React.Fragmentc> (typo) with broken closing syntax.
+                key must be on the outermost element returned from map. */}
             {projects.map(p=>(
-              <>
-                <tr key={p.id} style={{ borderBottom:"1px solid var(--border)" }}>
+              <React.Fragment key={p.id}>
+                <tr style={{ borderBottom:"1px solid var(--border)" }}>
                   <td style={{ padding:"10px 10px", fontSize:12, color:"var(--note-text)", fontWeight:700 }}>{p.id}</td>
                   <td style={{ padding:"10px 10px", fontSize:13, color:"var(--text)" }}>{p.label}</td>
                   <td style={{ padding:"10px 10px", fontSize:13, color:"var(--text)" }}>{p.panels}</td>
@@ -619,14 +687,14 @@ function PipelineProjectsTab({ config, setConfig }) {
                     </div>
                   </td>
                 </tr>
-                {editing===p.id&&(
-                  <tr key={p.id+"_ed"}>
+                {editing === p.id && (
+                  <tr>
                     <td colSpan={8} style={{ padding:"0 0 12px 0" }}>
                       <ProjectInlineEditor project={p} onSave={saveProject} onCancel={()=>setEditing(null)}/>
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -652,7 +720,7 @@ function PipelineProjectsTab({ config, setConfig }) {
     </div>
   );
 }
-
+ 
 function ProjectInlineEditor({ project, onSave, onCancel }) {
   const [form, setForm] = useState({...project});
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -689,16 +757,16 @@ function ProjectInlineEditor({ project, onSave, onCancel }) {
     </div>
   );
 }
-
+ 
 function PipelineSplitBranchTab({ config, setConfig }) {
   const stages=config.stages||[], split=config.split||{}, branch=config.branch||{}, branchOpts=branch.options||[];
   const [editingB, setEditingB]=useState(null);
   const [addingB,  setAddingB] =useState(false);
   const [newB, setNewB]=useState({id:"",label:"",icon:"⚡",color:"#378ADD",next:"",scanNote:""});
-
+ 
   const setSplit =(k,v)=>setConfig(c=>({...c,split:{...c.split,[k]:v}}));
   const setBranch=(k,v)=>setConfig(c=>({...c,branch:{...c.branch,[k]:v}}));
-
+ 
   return (
     <div>
       <div style={PS.card}>
@@ -724,7 +792,7 @@ function PipelineSplitBranchTab({ config, setConfig }) {
           </div>
         )}
       </div>
-
+ 
       <div style={PS.card}>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
           <div style={PS.secTitle}>Branch (operator method choice)</div>
@@ -766,7 +834,7 @@ function PipelineSplitBranchTab({ config, setConfig }) {
     </div>
   );
 }
-
+ 
 function BranchOptEditor({ stages, opt, onSave, onCancel, isNew }) {
   const [form,setForm]=useState({...opt});
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -794,12 +862,12 @@ function BranchOptEditor({ stages, opt, onSave, onCancel, isNew }) {
     </div>
   );
 }
-
+ 
 const PIPELINE_TABS = [
   {id:"stages",label:"Pipeline stages"},{id:"projects",label:"Projects"},
   {id:"split",label:"Split & branch"},{id:"settings",label:"Global settings"},
 ];
-
+ 
 function PipelineTab() {
   const { t } = useLang();
   const [config,  setConfig]  = useState(null);
@@ -807,16 +875,23 @@ function PipelineTab() {
   const [saving,  setSaving]  = useState(false);
   const [msg,     setMsg]     = useState(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => { getAdminPipelineConfig().then(d=>{setConfig(d);setLoading(false);}).catch(()=>setLoading(false)); }, []);
-
+ 
+  useEffect(() => {
+    getAdminPipelineConfig()
+      .then(d => { setConfig(d); setLoading(false); })
+      // FIX Bug 7: SESSION_EXPIRED already redirects — swallow it silently.
+      .catch(err => {
+        if (err.message !== "SESSION_EXPIRED") setLoading(false);
+      });
+  }, []);
+ 
   async function save() {
     setSaving(true); setMsg(null);
     try { await saveAdminPipelineConfig(config); setMsg({type:"ok",text:`✅ Pipeline ${t("save")}d — changes are live immediately.`}); }
     catch { setMsg({type:"err",text:"❌ Save failed."}); }
     finally { setSaving(false); }
   }
-
+ 
   async function handleReset() {
     if(!confirm("Reset pipeline to defaults?"))return;
     setSaving(true);
@@ -824,10 +899,10 @@ function PipelineTab() {
     setConfig(res.config); setSaving(false);
     setMsg({type:"ok",text:"✅ Reset to defaults."});
   }
-
+ 
   if (loading) return <Spin />;
   if (!config) return <div style={{ padding:32, color:"var(--err-text)" }}>Could not load pipeline config.</div>;
-
+ 
   return (
     <div style={{ maxWidth:900 }}>
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:16 }}>
@@ -840,7 +915,7 @@ function PipelineTab() {
           {saving?"Saving…":`💾 ${t("save")} pipeline`}
         </button>
       </div>
-
+ 
       {msg && (
         <div style={{ padding:"12px 16px", borderRadius:8, marginBottom:14, fontSize:13,
           background:msg.type==="ok"?"var(--ok-bg)":"var(--err-bg)",
@@ -848,7 +923,7 @@ function PipelineTab() {
           color:msg.type==="ok"?"var(--ok-text)":"var(--err-text)",
         }}>{msg.text}</div>
       )}
-
+ 
       <div style={{ display:"flex", gap:4, marginBottom:20, borderBottom:"1px solid var(--border)" }}>
         {PIPELINE_TABS.map(tb => (
           <button key={tb.id} onClick={()=>setPtab(tb.id)} style={{
@@ -860,7 +935,7 @@ function PipelineTab() {
           }}>{tb.label}</button>
         ))}
       </div>
-
+ 
       {ptab==="stages"   && <PipelineStagesTab   config={config} setConfig={setConfig}/>}
       {ptab==="projects" && <PipelineProjectsTab config={config} setConfig={setConfig}/>}
       {ptab==="split"    && <PipelineSplitBranchTab config={config} setConfig={setConfig}/>}
@@ -886,21 +961,57 @@ function PipelineTab() {
     </div>
   );
 }
-
+ 
 // ── Export tab ─────────────────────────────────────────────────────────────────
 function ExportTab() {
   const { t } = useLang();
-  const [startDate,setStartDate]=useState(""), [endDate,setEndDate]=useState("");
-  const [stage,setStage]=useState(""), [project,setProject]=useState("");
-
+  const [startDate, setStartDate] = useState("");
+  const [endDate,   setEndDate]   = useState("");
+  const [stage,     setStage]     = useState("");
+  const [project,   setProject]   = useState("");
+  // FIX Bug 13: _dl now throws instead of calling alert(). Error shown inline.
+  const [dlError,   setDlError]   = useState("");
+ 
   const exports = [
-    { label:`📄 Trays CSV`, color:"var(--accent-dk)", desc:"All tray records with optional filters.", action:()=>downloadTraysCSV({...(stage?{stage}:{}), ...(project?{project}:{}), ...(startDate?{start_date:startDate}:{}), ...(endDate?{end_date:endDate}:{})}) },
-    { label:`📋 Scan Log CSV`, color:"#3B6D11", desc:"Full scan event history with timestamps.", action:downloadScanLogCSV },
-    { label:`📊 Full Report XLSX`, color:"#7F77DD", desc:"3-sheet workbook: Trays, Scan Log, Stage Summary.", action:downloadReportXLSX },
+    {
+      label: `📄 Trays CSV`,
+      color: "var(--accent-dk)",
+      desc: "All tray records with optional filters.",
+      action: async () => {
+        try {
+          setDlError("");
+          await downloadTraysCSV({
+            ...(stage     ? { stage }               : {}),
+            ...(project   ? { project }             : {}),
+            ...(startDate ? { start_date: startDate } : {}),
+            ...(endDate   ? { end_date:   endDate   } : {}),
+          });
+        } catch (err) { setDlError(err.message); }
+      },
+    },
+    {
+      label: `📋 Scan Log CSV`,
+      color: "#3B6D11",
+      desc: "Full scan event history with timestamps.",
+      action: async () => {
+        try { setDlError(""); await downloadScanLogCSV(); }
+        catch (err) { setDlError(err.message); }
+      },
+    },
+    {
+      label: `📊 Full Report XLSX`,
+      color: "#7F77DD",
+      desc: "3-sheet workbook: Trays, Scan Log, Stage Summary.",
+      action: async () => {
+        try { setDlError(""); await downloadReportXLSX(); }
+        catch (err) { setDlError(err.message); }
+      },
+    },
   ];
-
+ 
   return (
     <div>
+      {dlError && <div className="err-box" style={{ marginBottom:16 }}>{dlError}</div>}
       <div style={card}>
         <div style={cardTitle}>Filters (for Trays CSV)</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
@@ -924,7 +1035,7 @@ function ExportTab() {
     </div>
   );
 }
-
+ 
 // ── Audit log tab ──────────────────────────────────────────────────────────────
 function AuditTab() {
   const { t } = useLang();
@@ -932,24 +1043,27 @@ function AuditTab() {
   const [loading, setLoading] = useState(true);
   const [limit,   setLimit]   = useState(200);
   const [filter,  setFilter]  = useState("");
-
-  function loadLogs(lim=limit) {
+ 
+  function loadLogs(lim) {
+    // FIX (minor): was `loadLogs(lim=limit)` — default param using a closure
+    // variable is an anti-pattern; the default is always the initial render value.
+    const effectiveLim = lim !== undefined ? lim : limit;
     setLoading(true);
-    getAuditLog(lim).then(d=>{ setLogs(Array.isArray(d)?d:[]); setLoading(false); });
+    getAuditLog(effectiveLim).then(d=>{ setLogs(Array.isArray(d)?d:[]); setLoading(false); });
   }
-  useEffect(()=>{loadLogs();},[]);
-
+  useEffect(()=>{ loadLogs(limit); },[]);
+ 
   function fmtDate(iso) {
     if(!iso)return"—";
     return new Date(iso).toLocaleString("en-GB",{dateStyle:"short",timeStyle:"medium"});
   }
-
+ 
   const filtered=logs.filter(l=>{
     if(!filter)return true;
     const q=filter.toLowerCase();
     return(l.username||"").toLowerCase().includes(q)||(l.action||"").toLowerCase().includes(q)||(l.details||"").toLowerCase().includes(q);
   });
-
+ 
   function downloadCSV() {
     const rows=[["Timestamp","User","Action","Details"],...filtered.map(l=>[fmtDate(l.timestamp),l.username||"",l.action||"",(l.details||"").replace(/,/g,";")])];
     const csv=rows.map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
@@ -959,7 +1073,7 @@ function AuditTab() {
     a.href=url; a.download=`audit_log_${new Date().toISOString().slice(0,10)}.csv`; a.click();
     URL.revokeObjectURL(url);
   }
-
+ 
   const actionTag=(action)=>{
     if(["DELETE_TRAY","DELETE_USER","BULK_DELETE_TRAYS"].includes(action))return"tag-red";
     if(["LOGIN","REGISTER"].includes(action))return"tag-blue";
@@ -967,17 +1081,17 @@ function AuditTab() {
     if(action==="SCAN")return"tag-green";
     return"tag-gray";
   };
-
+ 
   return (
     <div>
       <div style={{...card,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
         <input className="inp" style={{ flex:2, minWidth:180 }} placeholder={`${t("search")} user, action…`} value={filter} onChange={e=>setFilter(e.target.value)}/>
         <select className="inp" style={{ width:"auto",flex:"none" }} value={limit}
-          onChange={e=>{setLimit(+e.target.value);loadLogs(+e.target.value);}}>
+          onChange={e=>{ setLimit(+e.target.value); loadLogs(+e.target.value); }}>
           <option value={100}>Last 100</option><option value={200}>Last 200</option>
           <option value={500}>Last 500</option><option value={1000}>Last 1000</option>
         </select>
-        <button className="btn" onClick={()=>loadLogs()}>↻ {t("refresh")}</button>
+        <button className="btn" onClick={()=>loadLogs(limit)}>↻ {t("refresh")}</button>
         <button className="btn btn-blue" onClick={downloadCSV} disabled={filtered.length===0}>⬇ {t("export")}</button>
       </div>
       <div style={{ fontSize:11, color:"var(--muted)", marginBottom:8 }}>{filtered.length} entries{filter?" (filtered)":""}</div>
@@ -989,8 +1103,11 @@ function AuditTab() {
             <table className="tbl">
               <thead><tr><th>Timestamp</th><th>{t("users")}</th><th>Action</th><th>Details</th></tr></thead>
               <tbody>
-                {filtered.map((l,i)=>(
-                  <tr key={i}>
+                {/* FIX Bug 12: was key={i} (array index) — causes React reconciliation
+                    errors when the list is re-filtered and rows shift position.
+                    Now uses a stable composite key from the log entry itself. */}
+                {filtered.map((l)=>(
+                  <tr key={l.id ?? `${l.timestamp}-${l.username}-${l.action}`}>
                     <td style={{ fontSize:12, color:"var(--muted)", whiteSpace:"nowrap" }}>{fmtDate(l.timestamp)}</td>
                     <td><span style={{ fontFamily:"monospace", fontSize:12 }}>{l.username}</span></td>
                     <td><span className={`tag ${actionTag(l.action)}`}>{l.action}</span></td>
@@ -1005,7 +1122,7 @@ function AuditTab() {
     </div>
   );
 }
-
+ 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 function Spin() { return <div style={{ padding:32, color:"var(--muted)", textAlign:"center" }}><span className="spin"/> Loading…</div>; }
 function Grid({ children }) { return <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>{children}</div>; }
@@ -1017,6 +1134,7 @@ function EToggle({ value, onChange }) {
     </select>
   );
 }
+
 
 // ── Styles — all CSS variables ─────────────────────────────────────────────────
 const card      = { background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:16, marginBottom:0 };
