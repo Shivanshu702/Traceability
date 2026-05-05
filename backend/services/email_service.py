@@ -1,3 +1,4 @@
+# email_service.py
 
 import smtplib
 import os
@@ -30,7 +31,7 @@ def get_email_settings(db: Session, tenant_id: str = "default") -> EmailSettings
         smtp_port              = int(os.getenv("SMTP_PORT", "465")),
         smtp_user              = os.getenv("SMTP_USER", ""),
         smtp_password          = os.getenv("SMTP_PASSWORD", ""),
-        smtp_use_tls           = os.getenv("SMTP_USE_TLS", "false").lower() != "false",
+        smtp_use_tls           = os.getenv("SMTP_USE_SSL", os.getenv("SMTP_USE_TLS", "false")).lower() == "true",
         from_email             = os.getenv("FROM_EMAIL", ""),
         alert_recipients       = os.getenv("ALERT_EMAILS", ""),
         stuck_alert_enabled    = os.getenv("STUCK_ALERT_ENABLED", "").lower() == "true",

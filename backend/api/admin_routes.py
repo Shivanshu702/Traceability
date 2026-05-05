@@ -1,3 +1,5 @@
+# admin_routes.py
+
 import json as _json
 from datetime import datetime
 
@@ -245,9 +247,12 @@ def save_email_settings_route(
 def send_test_email(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
     tid      = tenant(user)
     settings = get_email_settings(db, tid)
-    try:
-        send_email(settings, settings.get("alert_recipients", []),
-                   "Traceability – test email", "<p>Test email sent successfully.</p>")
-        return {"ok": True}
-    except Exception as exc:
-        raise HTTPException(500, str(exc))
+    recipients = [r.strip() for r in (settings.alert_recipients or "").split(",") if r.strip()]
+    if not recipients:
+        raise HTTPException(400, "No alert recipients configured. Add at least one email in Email & Alerts settings.")
+    ok = send_email(settings, recipients,
+                    "Traceability – test email", "<p>Test email sent successfully.</p>")
+    if not ok:
+        raise HTTPException(500, "Email send failed. Check SMTP settings and server logs.")
+    return {"ok": True}
+    

@@ -11,8 +11,7 @@ import {
   useLocation,
 } from "react-router-dom";
 
-import OperatorReportPage   from "./pages/OperatorReportPage";
-import PipelineConfigEditor from "./pages/PipelineConfigEditor";
+import OperatorReportPage  from "./pages/OperatorReportPage";
 import CreateTraysPage from "./pages/CreateTraysPage";
 import ScanPage        from "./pages/ScanPage";
 import HistoryPage     from "./pages/HistoryPage";
@@ -88,6 +87,10 @@ function AppShell() {
 
   const isAdmin = user?.role === "admin";
 
+  // FIX: Removed /pipeline-editor from nav tabs — Pipeline Config lives inside
+  // the Admin panel (Admin → Pipeline Config tab). Having it as a top-level nav
+  // tab caused it to appear twice. OperatorReport kept as admin-only nav item
+  // since it is a standalone report page, not embedded in Admin.
   const navTabs = [
     { to: "/",        label: `📊 ${t("dashboard")}` },
     { to: "/scan",    label: `📷 ${t("scan")}`      },
@@ -97,15 +100,13 @@ function AppShell() {
       { to: "/manage",          label: `🗂 ${t("manageTrays")}` },
       { to: "/alerts",          label: `🚨 ${t("alerts")}`      },
       { to: "/admin",           label: `⚙ ${t("admin")}`        },
-      { to: "/operator-report", label: `📊 Operator Report`      },
-      { to: "/pipeline-editor", label: `🔧 Pipeline Editor`      },
+      { to: "/operator-report", label: `📊 Operator Report`     },
+      // /pipeline-editor intentionally removed — accessible via Admin → Pipeline Config
     ] : []),
   ];
 
-  // FIX Bug 11: LoginControls renders the theme + language controls.
-  // Defined inside AppShell so it closes over theme/lang state.
-  // Passed as the Controls prop to LoginPage so unauthenticated users
-  // can switch language and theme on the login screen.
+  // FIX Bug 11: LoginControls — passed to LoginPage so theme/lang toggles work
+  // before login. Defined inside AppShell to close over theme/lang state.
   function LoginControls() {
     return (
       <>
@@ -135,7 +136,6 @@ function AppShell() {
       {user && (
         <>
           <header className="hdr">
-            {/* Brand */}
             <span className="hdr-title">⚙ Traceability System</span>
             <span className="hdr-sub">{user.username}</span>
             <span className="hdr-sub" style={{ fontSize: 11 }}>
@@ -151,10 +151,7 @@ function AppShell() {
               {user.role}
             </span>
 
-            {/* Controls — CSS classes handle theming, no hardcoded colours */}
             <div className="hdr-controls">
-
-              {/* Language selector */}
               <select
                 className="lang-select"
                 value={lang}
@@ -168,7 +165,6 @@ function AppShell() {
                 ))}
               </select>
 
-              {/* Theme toggle */}
               <button
                 className="theme-toggle"
                 onClick={toggleTheme}
@@ -178,7 +174,6 @@ function AppShell() {
                 {theme === "dark" ? t("lightMode") : t("darkMode")}
               </button>
 
-              {/* Logout */}
               <button
                 className="btn btn-red"
                 style={{ padding: "5px 14px", fontSize: 12 }}
@@ -206,8 +201,7 @@ function AppShell() {
 
       <main className="main">
         <Routes>
-          {/* FIX Bug 8: /dev was fully public — any unauthenticated visitor
-              could reach it. Now requires admin role like all sensitive routes. */}
+          {/* FIX Bug 8: /dev requires admin — was fully public */}
           <Route path="/dev" element={
             <RequireAdmin user={user}><DevPage /></RequireAdmin>
           } />
@@ -217,8 +211,6 @@ function AppShell() {
             element={
               user
                 ? <Navigate to="/" replace />
-                // FIX Bug 11: pass LoginControls so theme/lang toggles appear
-                // on the login screen for unauthenticated users.
                 : <LoginPage onLogin={handleLogin} Controls={LoginControls} />
             }
           />
@@ -238,9 +230,9 @@ function AppShell() {
           <Route path="/operator-report" element={
             <RequireAdmin user={user}><OperatorReportPage /></RequireAdmin>
           } />
-          <Route path="/pipeline-editor" element={
-            <RequireAdmin user={user}><PipelineConfigEditor /></RequireAdmin>
-          } />
+          {/* FIX: /pipeline-editor route removed — Pipeline Config is embedded
+              in AdminPage under the Pipeline Config tab. The standalone
+              PipelineConfigEditor page caused the same UI to appear twice. */}
           <Route path="/manage" element={
             <RequireAdmin user={user}><ManageTraysPage /></RequireAdmin>
           } />

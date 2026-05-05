@@ -86,7 +86,7 @@ def upgrade() -> None:
         sa.Column("id",                    sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("tenant_id",             sa.String(),  nullable=False, unique=True),
         sa.Column("smtp_host",             sa.String(),  server_default=""),
-        sa.Column("smtp_port",             sa.Integer(), server_default="587"),
+        sa.Column("smtp_port",             sa.Integer(), server_default="465"),
         sa.Column("smtp_user",             sa.String(),  server_default=""),
         sa.Column("smtp_password",         sa.String(),  server_default=""),
         sa.Column("smtp_use_tls",          sa.Boolean(), server_default="1"),

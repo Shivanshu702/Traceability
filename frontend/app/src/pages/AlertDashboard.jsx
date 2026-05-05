@@ -1,4 +1,4 @@
-
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\AlertDashboard.jsx //
 
 import { useEffect, useRef, useState } from "react";
 import { getAlerts, getStageLoad, getAnalytics, getWeeklyStats } from "../api/api";

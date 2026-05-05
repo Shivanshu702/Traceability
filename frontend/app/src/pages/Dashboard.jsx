@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { getStats, getAllTrays, getPipeline, getScanLog } from "../api/api";
 
 // ── Stage color themes ─────────────────────────────────────────────────────────
+// These use explicit accent colors per stage (intentional brand colors).
+// The bg/border values are only used for the stage-group row backgrounds
+// in the expandable list — they are purposefully dark/tinted even in light mode
+// to keep stage identity clear. The main shell (cards, charts) uses CSS vars.
 const THEME = {
   CREATED:    { bg:"#0E1520", accent:"#6B7E95", border:"#6B7E9540" },
   RACK1_TOP:  { bg:"#091525", accent:"#378ADD", border:"#378ADD40" },
@@ -35,13 +39,16 @@ const ICONS = {
 };
 
 // ── Stat card ──────────────────────────────────────────────────────────────────
+// THEME FIX: was background:"#0D1320" (always dark) → now var(--card) so it
+// respects the active theme. Same for text colors (#6B7E95 → var(--muted)).
 function StatCard({ label, main, sub1, sub2, color, icon }) {
   return (
     <div style={{
-      background:"#0D1320", border:`1px solid ${color}55`,
+      background:"var(--card)", border:`1px solid ${color}55`,
       borderTop:`2px solid ${color}`, borderRadius:12,
       padding:"18px 18px 16px", position:"relative",
       overflow:"hidden", minWidth:0, flex:"1 1 140px",
+      boxShadow:"var(--shadow)",
     }}>
       <div style={{
         position:"absolute", top:-20, right:-20, width:80, height:80,
@@ -51,7 +58,7 @@ function StatCard({ label, main, sub1, sub2, color, icon }) {
         {icon}
       </div>
       <div style={{
-        fontSize:10, fontWeight:700, color:"#6B7E95",
+        fontSize:10, fontWeight:700, color:"var(--muted)",
         textTransform:"uppercase", letterSpacing:".08em", marginBottom:10,
       }}>
         {label}
@@ -59,13 +66,14 @@ function StatCard({ label, main, sub1, sub2, color, icon }) {
       <div style={{ fontSize:38, fontWeight:700, color, lineHeight:1, marginBottom:6 }}>
         {main}
       </div>
-      {sub1 && <div style={{ fontSize:12, color:"#6B7E95", marginBottom:2 }}>{sub1}</div>}
+      {sub1 && <div style={{ fontSize:12, color:"var(--muted)", marginBottom:2 }}>{sub1}</div>}
       {sub2 && <div style={{ fontSize:11, color:color+"cc", fontWeight:600 }}>{sub2}</div>}
     </div>
   );
 }
 
 // ── Pipeline stage card ────────────────────────────────────────────────────────
+// Stage cards keep their intentional tinted backgrounds for visual identity.
 function StageCard({ stage, count, units, totalTrays, onExpand }) {
   const theme = THEME[stage.id] || THEME.CREATED;
   const pct   = totalTrays > 0 ? Math.round((count / totalTrays) * 100) : 0;
@@ -125,7 +133,7 @@ function StageCard({ stage, count, units, totalTrays, onExpand }) {
   );
 }
 
-// ── Branch breakdown modal (BAT_MOUNT expand in pipeline bar) ─────────────────
+// ── Branch breakdown modal ─────────────────────────────────────────────────────
 function BranchModal({ stats, onClose }) {
   const solRCount = stats?.stage_counts?.["BAT_SOL_R"] || 0;
   const solMCount = stats?.stage_counts?.["BAT_SOL_M"] || 0;
@@ -143,22 +151,23 @@ function BranchModal({ stats, onClose }) {
       justifyContent:"center", padding:24,
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:"#0D1320", border:"1px solid #EF9F2744",
+        background:"var(--card)", border:"1px solid #EF9F2744",
         borderTop:"3px solid #EF9F27", borderRadius:16,
         padding:"24px 28px", width:"min(540px,96vw)",
+        boxShadow:"var(--shadow-lg)",
       }}>
         <div style={{ display:"flex", alignItems:"center", marginBottom:20 }}>
           <div>
             <div style={{ fontSize:15, fontWeight:700, color:"#EF9F27" }}>
               Battery Mounted — Branch Breakdown
             </div>
-            <div style={{ fontSize:11, color:"#6B7E95", marginTop:3 }}>
+            <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>
               {total} total trays · {totalU.toLocaleString()} total units
             </div>
           </div>
           <button onClick={onClose} style={{
             marginLeft:"auto", background:"none",
-            border:"none", cursor:"pointer", color:"#6B7E95",
+            border:"none", cursor:"pointer", color:"var(--muted)",
           }}>
             {ICONS.close}
           </button>
@@ -166,7 +175,7 @@ function BranchModal({ stats, onClose }) {
 
         {batCount > 0 && (
           <div style={{
-            background:"#1A1000", border:"1px solid #EF9F2733",
+            background:"var(--warn-bg)", border:"1px solid var(--warn-border)",
             borderLeft:"3px solid #EF9F27", borderRadius:10,
             padding:"14px 18px", marginBottom:14,
           }}>
@@ -189,9 +198,8 @@ function BranchModal({ stats, onClose }) {
         )}
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-          {/* Robot */}
           <div style={{
-            background:"#1A0808", border:"1px solid #E24B4A33",
+            background:"var(--err-bg)", border:"1px solid #E24B4A33",
             borderTop:"3px solid #E24B4A", borderRadius:10, padding:"16px 18px",
           }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#E24B4A", marginBottom:12 }}>
@@ -199,15 +207,11 @@ function BranchModal({ stats, onClose }) {
             </div>
             <div style={{ display:"flex", gap:20 }}>
               <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#E24B4A", lineHeight:1 }}>
-                  {solRCount}
-                </div>
+                <div style={{ fontSize:32, fontWeight:700, color:"#E24B4A", lineHeight:1 }}>{solRCount}</div>
                 <div style={{ fontSize:10, color:"#E24B4A77", marginTop:3 }}>trays</div>
               </div>
               <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#E24B4Aaa", lineHeight:1 }}>
-                  {solRUnits.toLocaleString()}
-                </div>
+                <div style={{ fontSize:32, fontWeight:700, color:"#E24B4Aaa", lineHeight:1 }}>{solRUnits.toLocaleString()}</div>
                 <div style={{ fontSize:10, color:"#E24B4A55", marginTop:3 }}>units</div>
               </div>
             </div>
@@ -222,9 +226,8 @@ function BranchModal({ stats, onClose }) {
               </div>
             )}
           </div>
-          {/* Manual */}
           <div style={{
-            background:"#061A14", border:"1px solid #5DCAA533",
+            background:"var(--ok-bg)", border:"1px solid #5DCAA533",
             borderTop:"3px solid #5DCAA5", borderRadius:10, padding:"16px 18px",
           }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#5DCAA5", marginBottom:12 }}>
@@ -232,15 +235,11 @@ function BranchModal({ stats, onClose }) {
             </div>
             <div style={{ display:"flex", gap:20 }}>
               <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#5DCAA5", lineHeight:1 }}>
-                  {solMCount}
-                </div>
+                <div style={{ fontSize:32, fontWeight:700, color:"#5DCAA5", lineHeight:1 }}>{solMCount}</div>
                 <div style={{ fontSize:10, color:"#5DCAA577", marginTop:3 }}>trays</div>
               </div>
               <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#5DCAA5aa", lineHeight:1 }}>
-                  {solMUnits.toLocaleString()}
-                </div>
+                <div style={{ fontSize:32, fontWeight:700, color:"#5DCAA5aa", lineHeight:1 }}>{solMUnits.toLocaleString()}</div>
                 <div style={{ fontSize:10, color:"#5DCAA555", marginTop:3 }}>units</div>
               </div>
             </div>
@@ -256,7 +255,7 @@ function BranchModal({ stats, onClose }) {
             )}
           </div>
         </div>
-        <div style={{ marginTop:16, fontSize:10, color:"#6B7E95", textAlign:"center" }}>
+        <div style={{ marginTop:16, fontSize:10, color:"var(--muted)", textAlign:"center" }}>
           Click outside to close
         </div>
       </div>
@@ -264,14 +263,12 @@ function BranchModal({ stats, onClose }) {
   );
 }
 
-// ── Stage group (normal expandable list — same for all stages) ─────────────────
+// ── Stage group (expandable tray list) ─────────────────────────────────────────
 function StageGroup({ stage, trays }) {
   const [open, setOpen] = useState(false);
 
-  // FIX Bug D2: renamed `t` → `theme` to avoid shadowing by the reduce callback
-  // parameter below. Previously `const t = THEME[...]` was silently shadowed by
-  // `trays.reduce((s, t) => ...)`, which would have used the tray object as `t`
-  // inside the reducer if the two scopes ever merged.
+  // FIX Bug D2: renamed `t` → `theme` to avoid shadowing the reduce callback
+  // parameter, and renamed `(s, t)` → `(sum, tray)` for clarity.
   const theme      = THEME[stage.id] || THEME.CREATED;
   const totalUnits = trays.reduce((sum, tray) => sum + (tray.total_units || 0), 0);
 
@@ -300,11 +297,11 @@ function StageGroup({ stage, trays }) {
         }}>
           {totalUnits.toLocaleString()} units
         </span>
-        <span style={{ color:"#6B7E95", fontSize:12 }}>{open ? "▲" : "▼"}</span>
+        <span style={{ color:"var(--muted)", fontSize:12 }}>{open ? "▲" : "▼"}</span>
       </div>
 
       {open && (
-        <div style={{ background:"#080C14", padding:"4px 14px 12px" }}>
+        <div style={{ background:"var(--surface)", padding:"4px 14px 12px" }}>
           <table className="tbl" style={{ marginTop:8 }}>
             <thead>
               <tr>
@@ -317,7 +314,7 @@ function StageGroup({ stage, trays }) {
                 const ageH = tr.last_updated
                   ? Math.round(((Date.now() - new Date(tr.last_updated)) / 3600000) * 10) / 10
                   : "—";
-                const stg  = THEME[tr.stage] || THEME.CREATED;
+                const stg = THEME[tr.stage] || THEME.CREATED;
                 return (
                   <tr key={tr.id}>
                     <td>
@@ -337,7 +334,7 @@ function StageGroup({ stage, trays }) {
                       </span>
                     </td>
                     <td style={{ fontSize:12 }}>{tr.project || "—"}</td>
-                    <td style={{ fontWeight:600, color:"#85B7EB" }}>
+                    <td style={{ fontWeight:600, color:"var(--note-text)" }}>
                       {(tr.total_units || 0).toLocaleString()}
                     </td>
                     <td style={{ fontSize:12 }}>{tr.shift || "—"}</td>
@@ -363,6 +360,7 @@ function StageGroup({ stage, trays }) {
 }
 
 // ── Pure CSS bar chart ─────────────────────────────────────────────────────────
+// THEME FIX: label color #6B7E95 → var(--muted)
 function BarChart({ data, valueKey, labelKey, colors, height = 140 }) {
   const max = Math.max(...data.map(d => d[valueKey] || 0), 1);
   return (
@@ -394,7 +392,7 @@ function BarChart({ data, valueKey, labelKey, colors, height = 140 }) {
               </div>
             </div>
             <div style={{
-              fontSize:9, color:"#6B7E95", textAlign:"center",
+              fontSize:9, color:"var(--muted)", textAlign:"center",
               whiteSpace:"nowrap", overflow:"hidden",
               textOverflow:"ellipsis", width:"100%",
             }}>
@@ -408,22 +406,21 @@ function BarChart({ data, valueKey, labelKey, colors, height = 140 }) {
 }
 
 // ── SVG donut chart ────────────────────────────────────────────────────────────
+// FIX Bug D3: was `let offset = 0` mutated inside map (side-effect in a pure
+// transform). Pre-compute cumulative offsets with reduce instead.
+// THEME FIX: stroke track color #1E2D42 → var(--border); center text → var(--text)/var(--muted)
 function DonutChart({ data, size = 120 }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   if (!total) return (
     <div style={{ width:size, height:size, display:"flex",
                   alignItems:"center", justifyContent:"center",
-                  color:"#6B7E95", fontSize:11 }}>
+                  color:"var(--muted)", fontSize:11 }}>
       No data
     </div>
   );
 
   const r = 44, cx = 50, cy = 50, circ = 2 * Math.PI * r;
 
-  // FIX Bug D3: was mutating `let offset` inside a map callback — a side-effectful
-  // pattern that works sequentially but is semantically wrong (map should be pure).
-  // Replaced with reduce to pre-compute each segment's cumulative start offset
-  // declaratively, making the rotation computation clean and explicit.
   const segments = data.reduce((acc, d, i) => {
     const prevCumulative = acc.length > 0 ? acc[acc.length - 1].cumulative : 0;
     const pct = d.value / total;
@@ -433,8 +430,9 @@ function DonutChart({ data, size = 120 }) {
 
   return (
     <svg viewBox="0 0 100 100" width={size} height={size}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1E2D42" strokeWidth={11}/>
-      {segments.map(seg => {
+      {/* THEME FIX: track stroke uses a neutral variable instead of hardcoded dark */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth={11}/>
+      {segments.map((seg) => {
         const dash = seg.pct * circ;
         const rot  = (seg.cumulative - seg.pct) * 360 - 90;
         return (
@@ -447,34 +445,37 @@ function DonutChart({ data, size = 120 }) {
           </circle>
         );
       })}
+      {/* THEME FIX: center text uses CSS vars instead of hardcoded hex */}
       <text x={cx} y={cy - 5} textAnchor="middle"
-        style={{ fontSize:15, fontWeight:700, fill:"#E8EFF8" }}>{total}</text>
+        style={{ fontSize:15, fontWeight:700, fill:"var(--text)" }}>{total}</text>
       <text x={cx} y={cy + 8} textAnchor="middle"
-        style={{ fontSize:7, fill:"#6B7E95" }}>TRAYS</text>
+        style={{ fontSize:7, fill:"var(--muted)" }}>TRAYS</text>
     </svg>
   );
 }
 
 // ── Expandable chart card ──────────────────────────────────────────────────────
+// THEME FIX: was background:"#0D1320", border:"1px solid #1E2D42" (always dark)
+// → now var(--card) and var(--border) so it respects the active theme.
 function ChartCard({ title, children, expandContent }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <>
       <div style={{
-        background:"#0D1320", border:"1px solid #1E2D42",
-        borderRadius:12, padding:"14px 14px 12px",
+        background:"var(--card)", border:"1px solid var(--border)",
+        borderRadius:12, padding:"14px 14px 12px", boxShadow:"var(--shadow)",
       }}>
         <div style={{ display:"flex", alignItems:"center", marginBottom:14 }}>
           <div style={{
-            fontSize:10, fontWeight:700, color:"#6B7E95",
+            fontSize:10, fontWeight:700, color:"var(--muted)",
             textTransform:"uppercase", letterSpacing:".08em", flex:1,
           }}>
             {title}
           </div>
           {expandContent && (
             <button onClick={() => setExpanded(true)} title="Expand" style={{
-              background:"none", border:"1px solid #1E2D42", borderRadius:6,
-              padding:"3px 6px", cursor:"pointer", color:"#6B7E95",
+              background:"none", border:"1px solid var(--border)", borderRadius:6,
+              padding:"3px 6px", cursor:"pointer", color:"var(--muted)",
               display:"flex", alignItems:"center",
             }}>
               {ICONS.expand}
@@ -490,15 +491,16 @@ function ChartCard({ title, children, expandContent }) {
           justifyContent:"center", padding:24,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            background:"#0D1320", border:"1px solid #1E2D42",
+            background:"var(--card)", border:"1px solid var(--border)",
             borderRadius:16, padding:"24px 28px",
             width:"min(760px,96vw)", maxHeight:"85vh", overflow:"auto",
+            boxShadow:"var(--shadow-lg)",
           }}>
             <div style={{ display:"flex", alignItems:"center", marginBottom:20 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:"#E8EFF8", flex:1 }}>{title}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", flex:1 }}>{title}</div>
               <button onClick={() => setExpanded(false)} style={{
                 background:"none", border:"none", cursor:"pointer",
-                color:"#6B7E95", display:"flex",
+                color:"var(--muted)", display:"flex",
               }}>
                 {ICONS.close}
               </button>
@@ -520,9 +522,7 @@ export default function Dashboard() {
   const [loading,         setLoading]         = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
   const [branchModal,     setBranchModal]     = useState(false);
-  // FIX Bug D1: added error state so API failures show a message instead of
-  // a blank screen. Previously catch() only called console.error, and the
-  // `if (!stats || !pipeline) return null` guard silently rendered nothing.
+  // FIX Bug D1: error state so API failures show a message instead of a blank screen
   const [loadError,       setLoadError]       = useState("");
 
   async function load(project = selectedProject) {
@@ -541,9 +541,8 @@ export default function Dashboard() {
       setScanLog(Array.isArray(log) ? log : []);
     } catch (e) {
       console.error("Dashboard load error:", e);
-      // SESSION_EXPIRED is already handled by req() which redirects to /login
       if (e.message !== "SESSION_EXPIRED") {
-        setLoadError("Failed to load dashboard data. Please refresh.");
+        setLoadError("Failed to load dashboard data. Please refresh the page.");
       }
     } finally {
       setLoading(false);
@@ -560,55 +559,37 @@ export default function Dashboard() {
 
   if (loading && !stats) {
     return (
-      <div style={{ padding:40, color:"#6B7E95" }}>
+      <div style={{ padding:40, color:"var(--muted)" }}>
         <span className="spin"/> Loading dashboard…
       </div>
     );
   }
 
-  // FIX Bug D1: show an actionable error instead of a blank screen when the
-  // API failed and stats/pipeline were never populated.
+  // FIX Bug D1: was `return null` — silent blank screen on API failure
   if (!stats || !pipeline) {
     return loadError
-      ? (
-        <div style={{ padding:40 }}>
-          <div className="err-box" style={{ maxWidth:480 }}>
-            ⚠ {loadError}
-            <button
-              className="btn btn-blue"
-              style={{ marginLeft:16, padding:"4px 14px", fontSize:12 }}
-              onClick={() => load(selectedProject)}
-            >
-              ↻ Retry
-            </button>
-          </div>
-        </div>
-      )
+      ? <div className="err-box" style={{ margin:40 }}>{loadError}</div>
       : null;
   }
 
   const projects    = pipeline.projects || [];
   const stages      = pipeline.stages   || [];
 
-  // Exclude SPLIT parent trays from all counts to prevent double-counting
   const nonSplitTrays = trays.filter(tray => tray.stage !== "SPLIT");
   const activeTrays   = nonSplitTrays.filter(tray => tray.stage !== "COMPLETE");
 
-  // Group active trays by stage
   const byStage = {};
   activeTrays.forEach(tray => {
     byStage[tray.stage] = byStage[tray.stage] || [];
     byStage[tray.stage].push(tray);
   });
 
-  // BAT_MOUNT group merges BAT_MOUNT + BAT_SOL_R + BAT_SOL_M into one row
   const batMountDisplay = [
     ...(byStage["BAT_MOUNT"] || []),
     ...(byStage["BAT_SOL_R"] || []),
     ...(byStage["BAT_SOL_M"] || []),
   ];
 
-  // BAT_MOUNT pipeline card shows combined count of all three sub-stages
   const batMountCount = (stats.stage_counts?.["BAT_MOUNT"] || 0)
                       + (stats.stage_counts?.["BAT_SOL_R"] || 0)
                       + (stats.stage_counts?.["BAT_SOL_M"] || 0);
@@ -625,7 +606,6 @@ export default function Dashboard() {
     : 100;
   const activeProject = selectedProject ? projects.find(p => p.id === selectedProject) : null;
 
-  // Chart data
   const donutData = stages
     .filter(s => (stats.stage_counts?.[s.id] || 0) > 0)
     .map((s, i) => ({
@@ -663,13 +643,18 @@ export default function Dashboard() {
 
   return (
     <div>
+      {/* Inline error banner for reload failures */}
+      {loadError && (
+        <div className="err-box" style={{ marginBottom:16 }}>{loadError}</div>
+      )}
+
       {/* Project filter pills */}
       <div style={{
         display:"flex", gap:8, flexWrap:"wrap",
         marginBottom:20, alignItems:"center",
       }}>
         <span style={{
-          fontSize:11, fontWeight:700, color:"#6B7E95",
+          fontSize:11, fontWeight:700, color:"var(--muted)",
           textTransform:"uppercase", letterSpacing:".06em",
         }}>
           Project
@@ -689,42 +674,36 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Inline error banner — shown after initial load if a refresh fails */}
-      {loadError && (
-        <div className="err-box" style={{ marginBottom:16 }}>
-          ⚠ {loadError}
-        </div>
-      )}
-
       {/* 6 KPI stat cards */}
       <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20 }}>
-        <StatCard label="Total Trays"       main={total}
+        <StatCard label="Total Trays"        main={total}
           sub1={`${totalUnitsAll.toLocaleString()} units`}
           color="#378ADD" icon={ICONS.grid} />
-        <StatCard label="Total Units"       main={totalUnitsAll.toLocaleString()}
+        <StatCard label="Total Units"        main={totalUnitsAll.toLocaleString()}
           sub1={`${(stats.total_complete_units || 0).toLocaleString()} units completed`}
           color="#7F77DD" icon={ICONS.units} />
         <StatCard label="Active in Pipeline" main={stats.total_active}
           sub1={`${(stats.total_active_units || 0).toLocaleString()} units in progress`}
           color="#EF9F27" icon={ICONS.active} />
-        <StatCard label="Done Today"        main={stats.completed_today}
+        <StatCard label="Done Today"         main={stats.completed_today}
           sub1={`${(stats.completed_today_units || 0).toLocaleString()} units out`}
           color="#3B6D11" icon={ICONS.done} />
-        <StatCard label="FIFO Rate"         main={`${fifoRate}%`}
+        <StatCard label="FIFO Rate"          main={`${fifoRate}%`}
           sub1={`${stats.fifo_violated || 0} violations`}
           color={fifoRate < 90 ? "#E24B4A" : "#5DCAA5"} icon={ICONS.fifo} />
-        <StatCard label="Total Scans"       main={totalScans}
+        <StatCard label="Total Scans"        main={totalScans}
           sub1="across all trays"
           color="#D4537E" icon={ICONS.scan} />
       </div>
 
-      {/* Colorful pipeline stage cards */}
+      {/* Pipeline stage cards */}
+      {/* THEME FIX: was background:"#0D1320", border:"1px solid #1E2D42" → CSS vars */}
       <div style={{
-        background:"#0D1320", border:"1px solid #1E2D42",
-        borderRadius:12, padding:16, marginBottom:20,
+        background:"var(--card)", border:"1px solid var(--border)",
+        borderRadius:12, padding:16, marginBottom:20, boxShadow:"var(--shadow)",
       }}>
         <div style={{
-          fontSize:10, fontWeight:700, color:"#6B7E95",
+          fontSize:10, fontWeight:700, color:"var(--muted)",
           textTransform:"uppercase", letterSpacing:".08em",
           marginBottom:14, display:"flex", alignItems:"center", gap:10,
         }}>
@@ -734,14 +713,14 @@ export default function Dashboard() {
               {activeProject.label}
             </span>
           )}
-          <span style={{ flex:1, height:1, background:"#1E2D42" }}/>
-          <span style={{ color:"#6B7E95", fontWeight:400, fontSize:10 }}>{pct}% complete</span>
+          <span style={{ flex:1, height:1, background:"var(--border)" }}/>
+          <span style={{ color:"var(--muted)", fontWeight:400, fontSize:10 }}>{pct}% complete</span>
         </div>
 
         <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
           {stages.map((s, i) => (
             <div key={s.id} style={{ display:"flex", alignItems:"center", gap:6 }}>
-              {i > 0 && <span style={{ color:"#6B7E95", fontSize:14, flexShrink:0 }}>›</span>}
+              {i > 0 && <span style={{ color:"var(--muted)", fontSize:14, flexShrink:0 }}>›</span>}
               <StageCard
                 stage={s}
                 count={s.id === "BAT_MOUNT" ? batMountCount : (stats.stage_counts?.[s.id] || 0)}
@@ -753,24 +732,22 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Branch modal */}
         {branchModal && <BranchModal stats={stats} onClose={() => setBranchModal(false)} />}
 
-        {/* Throughput bar */}
         <div style={{ marginTop:14 }}>
-          <div style={{ height:4, background:"#1E2D42", borderRadius:3, overflow:"hidden" }}>
+          <div style={{ height:4, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
             <div style={{
               height:"100%", width:pct + "%",
-              background:"linear-gradient(90deg,#27500A,#5DCAA5)",
+              background:"linear-gradient(90deg,var(--green),#5DCAA5)",
               borderRadius:3, transition:"width .5s",
             }}/>
           </div>
           <div style={{
             display:"flex", justifyContent:"space-between",
-            fontSize:10, color:"#6B7E95", marginTop:5,
+            fontSize:10, color:"var(--muted)", marginTop:5,
           }}>
             <span>0%</span>
-            <span style={{ color:"#3B6D11", fontWeight:700 }}>
+            <span style={{ color:"var(--green)", fontWeight:700 }}>
               {(stats.total_complete_units || 0).toLocaleString()} units completed
             </span>
             <span>100%</span>
@@ -792,8 +769,8 @@ export default function Dashboard() {
                 {donutData.map((d, i) => (
                   <div key={i} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
                     <div style={{ width:10, height:10, borderRadius:"50%", background:d.color, flexShrink:0 }}/>
-                    <span style={{ fontSize:13, color:"#6B7E95", flex:1 }}>{d.name}</span>
-                    <span style={{ fontSize:13, color:"#E8EFF8", fontWeight:700 }}>{d.value}</span>
+                    <span style={{ fontSize:13, color:"var(--muted)", flex:1 }}>{d.name}</span>
+                    <span style={{ fontSize:13, color:"var(--text)", fontWeight:700 }}>{d.value}</span>
                   </div>
                 ))}
               </div>
@@ -801,7 +778,7 @@ export default function Dashboard() {
           }
         >
           {donutData.length === 0 ? (
-            <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>No active trays</div>
+            <div style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:20 }}>No active trays</div>
           ) : (
             <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
               <DonutChart data={donutData} size={110}/>
@@ -809,14 +786,14 @@ export default function Dashboard() {
                 {donutData.slice(0, 5).map((d, i) => (
                   <div key={i} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
                     <div style={{ width:7, height:7, borderRadius:"50%", background:d.color, flexShrink:0 }}/>
-                    <span style={{ fontSize:10, color:"#6B7E95", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    <span style={{ fontSize:10, color:"var(--muted)", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                       {d.name}
                     </span>
-                    <span style={{ fontSize:10, color:"#E8EFF8", fontWeight:700 }}>{d.value}</span>
+                    <span style={{ fontSize:10, color:"var(--text)", fontWeight:700 }}>{d.value}</span>
                   </div>
                 ))}
                 {donutData.length > 5 && (
-                  <div style={{ fontSize:9, color:"#6B7E95", marginTop:4 }}>+{donutData.length - 5} more</div>
+                  <div style={{ fontSize:9, color:"var(--muted)", marginTop:4 }}>+{donutData.length - 5} more</div>
                 )}
               </div>
             </div>
@@ -831,7 +808,7 @@ export default function Dashboard() {
           }
         >
           {dailyData.every(d => d.scans === 0) ? (
-            <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>No scan data yet</div>
+            <div style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:20 }}>No scan data yet</div>
           ) : (
             <BarChart data={dailyData} valueKey="scans" labelKey="date"
               colors={dailyData.map((_, i) => i === dailyData.length - 1 ? "#5DCAA5" : "#378ADD")}
@@ -844,7 +821,7 @@ export default function Dashboard() {
             colors={["#378ADD","#EF9F27","#7F77DD"]} height={220}/>}
         >
           {shiftData.every(d => d.count === 0) ? (
-            <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>No data yet</div>
+            <div style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:20 }}>No data yet</div>
           ) : (
             <BarChart data={shiftData} valueKey="count" labelKey="shift"
               colors={["#378ADD","#EF9F27","#7F77DD"]} height={130}/>
@@ -856,7 +833,7 @@ export default function Dashboard() {
             colors={CHART_COLORS} height={220}/>}
         >
           {projData.length === 0 ? (
-            <div style={{ color:"#6B7E95", fontSize:12, textAlign:"center", padding:20 }}>No data yet</div>
+            <div style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:20 }}>No data yet</div>
           ) : (
             <BarChart data={projData} valueKey="units" labelKey="project"
               colors={CHART_COLORS} height={130}/>
@@ -869,7 +846,7 @@ export default function Dashboard() {
         <div className="card-title" style={{ margin:0 }}>
           Active Trays by Stage
           {activeProject && (
-            <span style={{ fontSize:11, color:"#6B7E95", fontWeight:400, marginLeft:8 }}>
+            <span style={{ fontSize:11, color:"var(--muted)", fontWeight:400, marginLeft:8 }}>
               — {activeProject.label}
             </span>
           )}
@@ -877,12 +854,11 @@ export default function Dashboard() {
       </div>
 
       {Object.keys(byStage).length === 0 ? (
-        <div style={{ color:"#6B7E95", textAlign:"center", padding:40 }}>
+        <div style={{ color:"var(--muted)", textAlign:"center", padding:40 }}>
           {activeProject ? `No active trays for ${activeProject.label}.` : "No active trays in the pipeline."}
         </div>
       ) : (
         stages.map(s => {
-          // BAT_MOUNT: merge all three sub-stages into one normal group
           if (s.id === "BAT_MOUNT") {
             if (batMountDisplay.length === 0) return null;
             return (
@@ -892,7 +868,6 @@ export default function Dashboard() {
               />
             );
           }
-          // Hide BAT_SOL_R and BAT_SOL_M as standalone (merged under BAT_MOUNT)
           if (s.id === "BAT_SOL_R" || s.id === "BAT_SOL_M") return null;
           if (!byStage[s.id]) return null;
           return <StageGroup key={s.id} stage={s} trays={byStage[s.id]} />;
@@ -907,7 +882,7 @@ function pill(active) {
     padding:"4px 14px", borderRadius:20, fontSize:12, fontWeight:600,
     cursor:"pointer", border:"1px solid", fontFamily:"inherit",
     background:  active ? "rgba(55,138,221,.15)" : "transparent",
-    borderColor: active ? "#378ADD" : "#1E2D42",
-    color:       active ? "#378ADD" : "#6B7E95",
+    borderColor: active ? "#378ADD" : "var(--border)",
+    color:       active ? "#378ADD" : "var(--muted)",
   };
 }
