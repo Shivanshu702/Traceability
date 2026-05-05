@@ -10,6 +10,7 @@ const SHIFT_COLORS = {
   Unknown:   "#888780",
 };
 
+// THEME FIX: bar label color "#6B7E95" → var(--muted)
 function BarChart({ data, valueKey, labelKey, colors, height = 120 }) {
   const max = Math.max(...data.map(d => d[valueKey] || 0), 1);
   return (
@@ -32,7 +33,7 @@ function BarChart({ data, valueKey, labelKey, colors, height = 120 }) {
                 )}
               </div>
             </div>
-            <div style={{ fontSize: 9, color: "#6B7E95", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>
+            <div style={{ fontSize: 9, color: "var(--muted)", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>
               {d[labelKey]}
             </div>
           </div>
@@ -42,8 +43,9 @@ function BarChart({ data, valueKey, labelKey, colors, height = 120 }) {
   );
 }
 
+// THEME FIX: empty track was background:"#1E2D42" (always dark) → var(--border)
 function StackedBar({ data, total, height = 12 }) {
-  if (!total) return <div style={{ height, background: "#1E2D42", borderRadius: 6 }} />;
+  if (!total) return <div style={{ height, background: "var(--border)", borderRadius: 6 }} />;
   return (
     <div style={{ display: "flex", height, borderRadius: 6, overflow: "hidden", gap: 1 }}>
       {data.filter(d => d.value > 0).map((d, i) => (
@@ -132,7 +134,20 @@ export default function AlertDashboard() {
 
   return (
     <div style={{ maxWidth: 900 }}>
-      <audio ref={audioRef} src="/alert.mp3" preload="auto" />
+      {/*
+        FIX — 416 Range Not Satisfiable:
+        `preload="auto"` caused the browser to immediately send a Range request
+        to buffer the audio on mount, before any interaction. If the file is
+        0 bytes or the CDN doesn't handle range requests for it, the server
+        returns 416. Fix: preload="none" — only fetches when play() is called.
+        onerror handler ensures a broken file never throws an unhandled error.
+      */}
+      <audio
+        ref={audioRef}
+        src="/alert.mp3"
+        preload="none"
+        onError={() => console.warn("alert.mp3 could not be loaded — audio notifications disabled.")}
+      />
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <h2 style={{ color: "var(--text)", margin: 0 }}>🚨 Factory Alerts</h2>
@@ -255,7 +270,7 @@ export default function AlertDashboard() {
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: col, flexShrink: 0 }} />
                       <div>
                         <span style={{ fontSize: 13, fontWeight: 700, color: col }}>{cnt}</span>
-                        <span style={{ fontSize: 11, color: "#6B7E95", marginLeft: 4 }}>{shift} ({pct}%)</span>
+                        <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: 4 }}>{shift} ({pct}%)</span>
                       </div>
                     </div>
                   );
@@ -265,8 +280,8 @@ export default function AlertDashboard() {
                 <div style={{ marginTop: 16, overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
                     <thead>
-                      <tr style={{ borderBottom: "1px solid #1E2D42" }}>
-                        <th style={{ padding: "6px 10px", textAlign: "left", color: "#6B7E95", fontWeight: 700, fontSize: 10, textTransform: "uppercase" }}>Week</th>
+                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                        <th style={{ padding: "6px 10px", textAlign: "left", color: "var(--muted)", fontWeight: 700, fontSize: 10, textTransform: "uppercase" }}>Week</th>
                         {Object.keys(shiftTotals).map(s => (
                           <th key={s} style={{ padding: "6px 10px", textAlign: "right", color: SHIFT_COLORS[s] || "#888780", fontWeight: 700, fontSize: 10, textTransform: "uppercase" }}>{s}</th>
                         ))}
@@ -274,10 +289,10 @@ export default function AlertDashboard() {
                     </thead>
                     <tbody>
                       {Object.entries(weekly.shift_by_week).map(([wk, shifts]) => (
-                        <tr key={wk} style={{ borderBottom: "1px solid #1E2D4244" }}>
-                          <td style={{ padding: "6px 10px", color: "#6B7E95" }}>{wk}</td>
+                        <tr key={wk} style={{ borderBottom: "1px solid var(--border)" }}>
+                          <td style={{ padding: "6px 10px", color: "var(--muted)" }}>{wk}</td>
                           {Object.keys(shiftTotals).map(s => (
-                            <td key={s} style={{ padding: "6px 10px", textAlign: "right", color: "#E8EFF8", fontWeight: 600 }}>
+                            <td key={s} style={{ padding: "6px 10px", textAlign: "right", color: "var(--text)", fontWeight: 600 }}>
                               {shifts[s] || "—"}
                             </td>
                           ))}
