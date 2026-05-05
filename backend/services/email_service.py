@@ -367,6 +367,48 @@ def send_daily_summary(
     )
 
 
+def send_otp_email(db, email: str, username: str, otp: str, tenant_id: str = "default"):
+    """Send registration OTP to the new user's email."""
+    settings = get_email_settings(db, tenant_id)
+    subject  = "Your Traceability System Registration Code"
+    body     = _wrap("🔐 Verify Your Email", f"""
+        <p>Hi <strong>{username}</strong>,</p>
+        <p>Your one-time registration code is:</p>
+        <div style="font-size:36px;font-weight:700;letter-spacing:10px;
+                    text-align:center;padding:20px;background:#F3F4F6;
+                    border-radius:8px;margin:20px 0;font-family:monospace">
+            {otp}
+        </div>
+        <p style="color:#6B7280;font-size:12px">
+            This code expires in <strong>10 minutes</strong>.
+            If you did not request this, please ignore this email.
+        </p>
+    """)
+    send_email(settings, [email], subject, body)
+
+
+def send_password_reset_email(db, user, email: str, raw_token: str, tenant_id: str = "default"):
+    """Send password reset token email."""
+    settings = get_email_settings(db, tenant_id)
+    subject  = "Traceability System — Password Reset"
+    body     = _wrap("🔑 Reset Your Password", f"""
+        <p>Hi <strong>{user.username}</strong>,</p>
+        <p>Your password reset token is:</p>
+        <div style="font-size:18px;font-weight:700;letter-spacing:4px;
+                    text-align:center;padding:16px;background:#F3F4F6;
+                    border-radius:8px;margin:20px 0;font-family:monospace;
+                    word-break:break-all">
+            {raw_token}
+        </div>
+        <p>Enter this token on the Reset Password page along with your new password.</p>
+        <p style="color:#6B7280;font-size:12px">
+            This token expires in 30 minutes.
+            If you did not request this, please ignore this email.
+        </p>
+    """)
+    send_email(settings, [email], subject, body)
+
+
 # ── Internal helper ───────────────────────────────────────────────────────────
 
 def _parse_recipients(raw: str) -> List[str]:

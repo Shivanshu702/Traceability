@@ -44,32 +44,46 @@ export async function logoutUser() {
   ["role", "username", "tenant_id"].forEach(k => localStorage.removeItem(k));
 }
 
-export async function registerUser(username, password, role = "operator", tenant_id = "default") {
-  const res = await fetch(`${BASE}/register`, {
-    method:      "POST",
+// Registration — Step 1: send OTP
+export async function registerSendOtp(username, email, password, confirmPassword, tenant_id = "default") {
+  const res = await fetch(`${BASE}/register/send-otp`, {
+    method: "POST",
     credentials: "include",
-    headers:     { "Content-Type": "application/json" },
-    body:        JSON.stringify({ username, password, role, tenant_id }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, email, password, confirm_password: confirmPassword, tenant_id }),
   });
   return res.json();
 }
 
+// Registration — Step 2: verify OTP
+export async function registerVerifyOtp(username, tenant_id, otp) {
+  const res = await fetch(`${BASE}/register/verify-otp`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, tenant_id, otp }),
+  });
+  return res.json();
+}
+
+// Forgot password — Step 1: request token (sends email)
 export async function forgotPasswordRequest(username, tenant_id = "default") {
   const res = await fetch(`${BASE}/forgot-password/request`, {
-    method:      "POST",
+    method: "POST",
     credentials: "include",
-    headers:     { "Content-Type": "application/json" },
-    body:        JSON.stringify({ username, tenant_id }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, tenant_id }),
   });
   return res.json();
 }
 
+// Forgot password — Step 2: confirm with token
 export async function forgotPasswordConfirm(token, new_password) {
   const res = await fetch(`${BASE}/forgot-password/confirm`, {
-    method:      "POST",
+    method: "POST",
     credentials: "include",
-    headers:     { "Content-Type": "application/json" },
-    body:        JSON.stringify({ token, new_password }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password }),
   });
   return res.json();
 }
@@ -146,9 +160,6 @@ export function downloadTraysCSV(filters = {}) {
 export function downloadScanLogCSV() { return _dl("/export/scan-log", "scan_log.csv"); }
 export function downloadReportXLSX() { return _dl("/export/report",   "production_report.xlsx"); }
 
-// FIX Bug 13: throws an Error instead of calling alert(), which blocked the
-// JS event loop and was inconsistent with the rest of the app's error handling.
-// Callers (ExportTab) now catch and display the error inline.
 async function _dl(path, filename) {
   const res = await fetch(`${BASE}${path}`, { credentials: "include" });
   if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);

@@ -68,6 +68,19 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class PendingRegistration(Base):
+    __tablename__ = "pending_registrations"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    tenant_id    = Column(String, nullable=False, index=True)
+    username     = Column(String, nullable=False)
+    email        = Column(String, nullable=False)
+    password_hash = Column(String, nullable=False)
+    otp_hash     = Column(String, nullable=False)
+    expires_at   = Column(DateTime, nullable=False)
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
