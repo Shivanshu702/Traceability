@@ -148,30 +148,17 @@ def _send_via_smtp(
 
 # ── Unified send function ─────────────────────────────────────────────────────
 
-def send_email(
-    settings:  EmailSettings,
-    to:        List[str],
-    subject:   str,
-    html_body: str,
-) -> bool:
-    """
-    Try Resend first (if RESEND_API_KEY is set), fall back to SMTP.
-    This means you can use Resend for production and SMTP for local dev.
-    """
+def send_email(settings, to, subject, html_body) -> bool:
     if not to:
         return False
 
-    # 1. Try Resend
+    # 1. Try Resend first ← This will now work once RESEND_API_KEY is set
     if os.getenv("RESEND_API_KEY"):
-        result = _send_via_resend(
-            to, subject, html_body,
-            from_email=settings.from_email or "",
-        )
+        result = _send_via_resend(to, subject, html_body, from_email=settings.from_email or "")
         if result:
             return True
-        logger.warning("Resend failed — falling back to SMTP")
 
-    # 2. Fall back to SMTP
+    # 2. Fall back to SMTP ← This is what's failing on Render
     return _send_via_smtp(settings, to, subject, html_body)
 
 
