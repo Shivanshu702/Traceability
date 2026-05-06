@@ -367,8 +367,7 @@ def send_daily_summary(
     )
 
 
-def send_otp_email(db, email: str, username: str, otp: str, tenant_id: str = "default"):
-    """Send registration OTP to the new user's email."""
+def send_otp_email(db, email: str, username: str, otp: str, tenant_id: str = "default") -> bool:
     settings = get_email_settings(db, tenant_id)
     subject  = "Your Traceability System Registration Code"
     body     = _wrap("🔐 Verify Your Email", f"""
@@ -384,7 +383,7 @@ def send_otp_email(db, email: str, username: str, otp: str, tenant_id: str = "de
             If you did not request this, please ignore this email.
         </p>
     """)
-    send_email(settings, [email], subject, body)
+    return send_email(settings, [email], subject, body)
 
 
 def send_password_reset_email(db, user, email: str, raw_token: str, tenant_id: str = "default"):

@@ -138,12 +138,17 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
 
     # Send OTP email
     try:
-        from services.email_service import send_otp_email, get_email_settings
-        settings = get_email_settings(db, tenant_id)
-        send_otp_email(db, email, username, otp, tenant_id)
+        from services.email_service import send_otp_email
+        ok = send_otp_email(db, email, username, otp, tenant_id)
+        if not ok:
+            raise HTTPException(
+                500,
+                "Could not send OTP email. Please check your Email & Alerts settings in the Admin panel."
+            )
+    except HTTPException:
+        raise
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).error("Failed to send OTP email: %s", exc)
+        raise HTTPException(500, f"Email error: {str(exc)}")
 
     return {"message": "OTP sent to your email. It expires in 10 minutes."}
 
