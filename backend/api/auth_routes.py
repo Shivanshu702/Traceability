@@ -99,7 +99,9 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
     email     = (payload.get("email") or "").strip()
     password  = payload.get("password") or ""
     confirm   = payload.get("confirm_password") or ""
-    tenant_id = _validate_tenant((payload.get("tenant_id") or "default").strip())
+    tenant_id = (payload.get("tenant_id") or "default").strip().upper()
+    if not tenant_id:
+        raise HTTPException(400, "Organisation ID is required.")
 
     if not username or not email or not password:
         raise HTTPException(400, "Username, email and password are required.")
