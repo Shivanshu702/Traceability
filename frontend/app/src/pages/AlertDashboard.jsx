@@ -10,7 +10,31 @@ const SHIFT_COLORS = {
   Unknown:   "#888780",
 };
 
-// THEME FIX: bar label color "#6B7E95" → var(--muted)
+function playAlertBeep() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx  = new AudioCtx();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+    // Two-tone beep: 440 Hz + 880 Hz for clarity
+    [440, 880].forEach(freq => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.connect(gain);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    });
+  } catch {
+    // Web Audio API unavailable or blocked — fail silently
+  }
+}
+
+// ── Bar chart ─────────────────────────────────────────────────────────────────
 function BarChart({ data, valueKey, labelKey, colors, height = 120 }) {
   const max = Math.max(...data.map(d => d[valueKey] || 0), 1);
   return (
@@ -43,7 +67,7 @@ function BarChart({ data, valueKey, labelKey, colors, height = 120 }) {
   );
 }
 
-// THEME FIX: empty track was background:"#1E2D42" (always dark) → var(--border)
+// ── Stacked bar ───────────────────────────────────────────────────────────────
 function StackedBar({ data, total, height = 12 }) {
   if (!total) return <div style={{ height, background: "var(--border)", borderRadius: 6 }} />;
   return (
@@ -55,13 +79,13 @@ function StackedBar({ data, total, height = 12 }) {
   );
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
 export default function AlertDashboard() {
   const [alerts,      setAlerts]      = useState([]);
   const [load,        setLoad]        = useState({});
   const [analytics,   setAnalytics]   = useState(null);
   const [weekly,      setWeekly]      = useState(null);
   const [hasCritical, setHasCritical] = useState(false);
-  const audioRef       = useRef(null);
   const prevAlertCount = useRef(0);
 
   async function fetchData() {
@@ -70,10 +94,13 @@ export default function AlertDashboard() {
         getAlerts(), getStageLoad(), getAnalytics(), getWeeklyStats(),
       ]);
       const newAlerts = alertData.alerts || [];
-      if (newAlerts.length > prevAlertCount.current && audioRef.current) {
-        audioRef.current.play().catch(() => {});
+
+      // Play beep only when alert count increases
+      if (newAlerts.length > prevAlertCount.current) {
+        playAlertBeep();
       }
       prevAlertCount.current = newAlerts.length;
+
       setHasCritical(newAlerts.some(a => a.delay_seconds > 3600));
       setAlerts(newAlerts);
       setLoad(loadData || {});
@@ -134,20 +161,7 @@ export default function AlertDashboard() {
 
   return (
     <div style={{ maxWidth: 900 }}>
-      {/*
-        FIX — 416 Range Not Satisfiable:
-        `preload="auto"` caused the browser to immediately send a Range request
-        to buffer the audio on mount, before any interaction. If the file is
-        0 bytes or the CDN doesn't handle range requests for it, the server
-        returns 416. Fix: preload="none" — only fetches when play() is called.
-        onerror handler ensures a broken file never throws an unhandled error.
-      */}
-      <audio
-        ref={audioRef}
-        src="/alert.mp3"
-        preload="none"
-        onError={() => console.warn("alert.mp3 could not be loaded — audio notifications disabled.")}
-      />
+      {/* No <audio> element needed — Web Audio API generates the beep in JS */}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <h2 style={{ color: "var(--text)", margin: 0 }}>🚨 Factory Alerts</h2>
