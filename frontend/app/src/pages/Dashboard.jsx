@@ -652,10 +652,10 @@ export default function Dashboard() {
           fontSize:11, fontWeight:700, color:"var(--muted)",
           textTransform:"uppercase", letterSpacing:".06em",
         }}>
-          t("Project")
+          Project
         </span>
         <button onClick={() => handleProjectSelect(null)} style={pill(!selectedProject)}>
-          t("All")
+          All
         </button>
         {projects.map(p => (
           <button key={p.id} onClick={() => handleProjectSelect(p.id)}
@@ -665,7 +665,7 @@ export default function Dashboard() {
         ))}
         <button className="btn" style={{ marginLeft:"auto", fontSize:12 }}
           onClick={() => load(selectedProject)} disabled={loading}>
-          {loading ? <span className="spin"/> : "↻"} t("Refresh")
+          {loading ? <span className="spin"/> : "↻"} Refresh
         </button>
       </div>
 
