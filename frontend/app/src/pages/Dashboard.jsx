@@ -671,23 +671,23 @@ export default function Dashboard() {
 
       {/* 6 KPI stat cards */}
       <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20 }}>
-        <StatCard label={t("Total Trays")}        main={total}
+        <StatCard label="Total Trays"       main={total}
           sub1={`${totalUnitsAll.toLocaleString()} units`}
           color="#378ADD" icon={ICONS.grid} />
-        <StatCard label={t("Total Units")}        main={totalUnitsAll.toLocaleString()}
+        <StatCard label="Total Units"        main={totalUnitsAll.toLocaleString()}
           sub1={`${(stats.total_complete_units || 0).toLocaleString()} units completed`}
           color="#7F77DD" icon={ICONS.units} />
-        <StatCard label={t("Active in Pipeline")} main={stats.total_active}
+        <StatCard label="Active in Pipeline" main={stats.total_active}
           sub1={`${(stats.total_active_units || 0).toLocaleString()} units in progress`}
           color="#EF9F27" icon={ICONS.active} />
-        <StatCard label={t("Done Today")}         main={stats.completed_today}
+        <StatCard label="Done Today"         main={stats.completed_today}
           sub1={`${(stats.completed_today_units || 0).toLocaleString()} units out`}
           color="#3B6D11" icon={ICONS.done} />
-        <StatCard label={t("FIFO Rate")}          main={`${fifoRate}%`}
+        <StatCard label="FIFO Rate"          main={`${fifoRate}%`}
           sub1={`${stats.fifo_violated || 0} violations`}
           color={fifoRate < 90 ? "#E24B4A" : "#5DCAA5"} icon={ICONS.fifo} />
-        <StatCard label={t("Total Scans")}        main={totalScans}
-          sub1={t("across all trays")}
+        <StatCard label="Total Scans"        main={totalScans}
+          sub1="across all trays"
           color="#D4537E" icon={ICONS.scan} />
       </div>
 
