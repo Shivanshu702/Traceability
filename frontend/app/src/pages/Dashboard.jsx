@@ -3,11 +3,6 @@
 import { useEffect, useState } from "react";
 import { getStats, getAllTrays, getPipeline, getScanLog } from "../api/api";
 
-// ── Stage color themes ─────────────────────────────────────────────────────────
-// These use explicit accent colors per stage (intentional brand colors).
-// The bg/border values are only used for the stage-group row backgrounds
-// in the expandable list — they are purposefully dark/tinted even in light mode
-// to keep stage identity clear. The main shell (cards, charts) uses CSS vars.
 const THEME = {
   CREATED:    { bg:"#0E1520", accent:"#6B7E95", border:"#6B7E9540" },
   RACK1_TOP:  { bg:"#091525", accent:"#378ADD", border:"#378ADD40" },
@@ -281,7 +276,7 @@ function StageGroup({ stage, trays }) {
         display:"flex", alignItems:"center", gap:10,
         padding:"11px 14px", cursor:"pointer", background:theme.bg,
       }}>
-        <span style={{ fontSize:13, fontWeight:600, flex:1, color:"#E8EFF8" }}>
+        <span style={{ fontSize:13, fontWeight:600, flex:1, color:"var(--text)" }}>
           {stage.label}
         </span>
         <span style={{
@@ -305,8 +300,8 @@ function StageGroup({ stage, trays }) {
           <table className="tbl" style={{ marginTop:8 }}>
             <thead>
               <tr>
-                <th>Tray ID</th><th>Stage</th><th>Project</th>
-                <th>Units</th><th>Shift</th><th>FIFO</th><th>Age (h)</th>
+                <th>t("Tray ID")</th><th>t("Stage")</th><th>t("Project")</th>
+                <th>t("Units")</th><th>t("Shift")</th><th>t("FIFO")</th><th>t("Age (h)")</th>
               </tr>
             </thead>
             <tbody>
@@ -560,7 +555,7 @@ export default function Dashboard() {
   if (loading && !stats) {
     return (
       <div style={{ padding:40, color:"var(--muted)" }}>
-        <span className="spin"/> Loading dashboard…
+        <span className="spin"/> t("Loading dashboard…")
       </div>
     );
   }
@@ -657,10 +652,10 @@ export default function Dashboard() {
           fontSize:11, fontWeight:700, color:"var(--muted)",
           textTransform:"uppercase", letterSpacing:".06em",
         }}>
-          Project
+          t("Project")
         </span>
         <button onClick={() => handleProjectSelect(null)} style={pill(!selectedProject)}>
-          All
+          t("All")
         </button>
         {projects.map(p => (
           <button key={p.id} onClick={() => handleProjectSelect(p.id)}
@@ -670,29 +665,29 @@ export default function Dashboard() {
         ))}
         <button className="btn" style={{ marginLeft:"auto", fontSize:12 }}
           onClick={() => load(selectedProject)} disabled={loading}>
-          {loading ? <span className="spin"/> : "↻"} Refresh
+          {loading ? <span className="spin"/> : "↻"} t("Refresh")
         </button>
       </div>
 
       {/* 6 KPI stat cards */}
       <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20 }}>
-        <StatCard label="Total Trays"        main={total}
+        <StatCard label=t("Total Trays")        main={total}
           sub1={`${totalUnitsAll.toLocaleString()} units`}
           color="#378ADD" icon={ICONS.grid} />
-        <StatCard label="Total Units"        main={totalUnitsAll.toLocaleString()}
+        <StatCard label=t("Total Units")        main={totalUnitsAll.toLocaleString()}
           sub1={`${(stats.total_complete_units || 0).toLocaleString()} units completed`}
           color="#7F77DD" icon={ICONS.units} />
-        <StatCard label="Active in Pipeline" main={stats.total_active}
+        <StatCard label=t("Active in Pipeline") main={stats.total_active}
           sub1={`${(stats.total_active_units || 0).toLocaleString()} units in progress`}
           color="#EF9F27" icon={ICONS.active} />
-        <StatCard label="Done Today"         main={stats.completed_today}
+        <StatCard label=t("Done Today")         main={stats.completed_today}
           sub1={`${(stats.completed_today_units || 0).toLocaleString()} units out`}
           color="#3B6D11" icon={ICONS.done} />
-        <StatCard label="FIFO Rate"          main={`${fifoRate}%`}
+        <StatCard label=t("FIFO Rate")          main={`${fifoRate}%`}
           sub1={`${stats.fifo_violated || 0} violations`}
           color={fifoRate < 90 ? "#E24B4A" : "#5DCAA5"} icon={ICONS.fifo} />
-        <StatCard label="Total Scans"        main={totalScans}
-          sub1="across all trays"
+        <StatCard label=t("Total Scans")        main={totalScans}
+          sub1=t("across all trays")
           color="#D4537E" icon={ICONS.scan} />
       </div>
 

@@ -1,3 +1,5 @@
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\ResetPasswordPage.jsx //
+
 import { useState, useEffect } from "react";
 import { useLang } from "../context/LangContext";
 

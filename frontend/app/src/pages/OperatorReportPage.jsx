@@ -1,3 +1,5 @@
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\OperatorReportPage.jsx //
+
 import { useEffect, useState } from "react";
 import { getOperatorStats } from "../api/api";
 import { useLang } from "../context/LangContext";

@@ -1,3 +1,5 @@
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\ManageTraysPage.jsx //
+
 import { useState, useEffect } from "react";
 import { getAllTrays, getPipeline, bulkDeleteTrays, deleteTray } from "../api/api";
 import { useLang } from "../context/LangContext";

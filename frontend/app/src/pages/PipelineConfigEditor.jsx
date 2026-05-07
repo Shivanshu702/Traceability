@@ -1,4 +1,4 @@
-
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\PipelineConfigEditor.jsx //
 
 import { useEffect, useState } from "react";
 import { getAdminPipelineConfig, saveAdminPipelineConfig } from "../api/api";

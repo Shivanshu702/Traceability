@@ -164,27 +164,27 @@ export default function AlertDashboard() {
       {/* No <audio> element needed — Web Audio API generates the beep in JS */}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <h2 style={{ color: "var(--text)", margin: 0 }}>🚨 Factory Alerts</h2>
+        <h2 style={{ color: "var(--text)", margin: 0 }}>🚨 t("Factory Alerts")</h2>
         {hasCritical && <span className="tag tag-red" style={{ fontSize: 12 }}>CRITICAL</span>}
-        <button className="btn" style={{ marginLeft: "auto", fontSize: 12 }} onClick={fetchData}>↻ Refresh</button>
+        <button className="btn" style={{ marginLeft: "auto", fontSize: 12 }} onClick={fetchData}>↻ t("Refresh")</button>
       </div>
 
       {analytics && (
         <div className="stat-grid" style={{ marginBottom: 20 }}>
           <div className="stat-card" style={{ borderTopColor: "#378ADD" }}>
-            <div className="stat-label">Total Trays</div>
+            <div className="stat-label">t("Total Trays")</div>
             <div className="stat-value" style={{ color: "#378ADD" }}>{analytics.total}</div>
           </div>
           <div className="stat-card" style={{ borderTopColor: "#3B6D11" }}>
-            <div className="stat-label">Completed</div>
+            <div className="stat-label">t("Completed")</div>
             <div className="stat-value" style={{ color: "#3B6D11" }}>{analytics.completed}</div>
           </div>
           <div className="stat-card" style={{ borderTopColor: "#EF9F27" }}>
-            <div className="stat-label">WIP</div>
+            <div className="stat-label">t("WIP")</div>
             <div className="stat-value" style={{ color: "#EF9F27" }}>{analytics.wip}</div>
           </div>
           <div className="stat-card" style={{ borderTopColor: "#7F77DD" }}>
-            <div className="stat-label">Avg Cycle Time</div>
+            <div className="stat-label">t("Avg Cycle Time")</div>
             <div className="stat-value" style={{ color: "#7F77DD", fontSize: 22 }}>
               {fmtTime(Math.round(analytics.avg_cycle_time_sec))}
             </div>
@@ -193,13 +193,13 @@ export default function AlertDashboard() {
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">⚠ Bottleneck Alerts ({alerts.length})</div>
+        <div className="card-title">⚠ t("Bottleneck Alerts") ({alerts.length})</div>
         {alerts.length === 0 ? (
-          <div className="ok-box">✅ No bottlenecks — all trays moving normally</div>
+          <div className="ok-box">✅ t("No bottlenecks — all trays moving normally")</div>
         ) : (
           <table className="tbl">
             <thead>
-              <tr><th>Tray ID</th><th>Stage</th><th>Project</th><th>Stuck for</th></tr>
+              <tr><th>t("Tray ID")</th><th>t("Stage")</th><th>t("Project")</th><th>t("Stuck for")</th></tr>
             </thead>
             <tbody>
               {alerts.map((a, i) => (
@@ -220,7 +220,7 @@ export default function AlertDashboard() {
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">📊 Stage Load</div>
+        <div className="card-title">📊 t("Stage Load")</div>
         {Object.keys(load).length === 0 ? (
           <p style={{ color: "var(--muted)" }}>No active trays</p>
         ) : (

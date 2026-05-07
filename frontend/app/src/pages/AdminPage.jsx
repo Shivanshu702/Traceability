@@ -18,11 +18,11 @@ export default function AdminPage() {
  
   const TABS = [
     { key:"users",    label:`👥 ${t("users")}` },
-    { key:"roles",    label:"🔑 Roles & Permissions" },
-    { key:"email",    label:"📧 Email & Alerts" },
-    { key:"pipeline", label:"🔧 Pipeline Config" },
+    { key:"roles",    label:`🔑 ${t("Roles & Permissions")}` },
+    { key:"email",    label:`📧 ${t("Email & Alerts")}` },
+    { key:"pipeline", label:`🔧 ${t("Pipeline Config")}` },
     { key:"export",   label:`⬇ ${t("export")}` },
-    { key:"audit",    label:"📋 Audit Log" },
+    { key:"audit",    label:`📋 ${t("Audit Log")}` },
   ];
  
   return (
