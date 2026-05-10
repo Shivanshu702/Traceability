@@ -42,7 +42,51 @@ def get_email_settings(db: Session, tenant_id: str = "default") -> EmailSettings
     )
 
 
-# ── SMTP sender ────────────────────────────────────────────────────────────────
+# ── Resend sender (primary — works on all hosting providers) ──────────────────
+
+def _send_via_resend(
+    to:        List[str],
+    subject:   str,
+    html_body: str,
+    from_email: str = "",
+) -> bool:
+    """
+    Send email via Resend HTTP API.
+    Requires RESEND_API_KEY environment variable.
+    Sign up free at https://resend.com — 3,000 emails/month on free tier.
+    """
+    api_key = os.getenv("RESEND_API_KEY", "")
+    if not api_key:
+        return False
+
+    try:
+        import resend  # pip install resend
+        resend.api_key = api_key
+
+        sender = from_email or os.getenv("FROM_EMAIL", "")
+        # If no custom domain verified yet, use Resend's test sender
+        if not sender or "@" not in sender:
+            sender = "Traceability System <onboarding@resend.dev>"
+
+        params = {
+            "from":    sender,
+            "to":      to,
+            "subject": subject,
+            "html":    html_body,
+        }
+        resend.Emails.send(params)
+        logger.info(f"[Resend] Email sent: {subject} → {to}")
+        return True
+
+    except ImportError:
+        logger.warning("Resend package not installed. Run: pip install resend")
+        return False
+    except Exception as exc:
+        logger.error(f"[Resend] Send error: {exc}")
+        return False
+
+
+# ── SMTP sender (fallback) ────────────────────────────────────────────────────
 
 def _send_via_smtp(
     settings:  EmailSettings,
@@ -107,6 +151,14 @@ def _send_via_smtp(
 def send_email(settings, to, subject, html_body) -> bool:
     if not to:
         return False
+
+    # 1. Try Resend first ← This will now work once RESEND_API_KEY is set
+    if os.getenv("RESEND_API_KEY"):
+        result = _send_via_resend(to, subject, html_body, from_email=settings.from_email or "")
+        if result:
+            return True
+
+    # 2. Fall back to SMTP ← This is what's failing on Render
     return _send_via_smtp(settings, to, subject, html_body)
 
 
