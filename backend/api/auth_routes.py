@@ -29,6 +29,11 @@ _RESET_TTL_MINUTES = 15
 
 _COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() != "false"
 
+# ── Email OTP toggle ───────────────────────────────────────────────────────────
+# Set REQUIRE_EMAIL_OTP=true on your own server to enable OTP email verification.
+# Leave as false (default) on Render free tier where SMTP is blocked.
+REQUIRE_EMAIL_OTP = os.getenv("REQUIRE_EMAIL_OTP", "false").lower() == "true"
+
 # ── Tenant allowlist ───────────────────────────────────────────────────────────
 _raw_tenants = os.getenv("ALLOWED_TENANTS", "").strip()
 ALLOWED_TENANTS = (
@@ -96,15 +101,19 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
 @router.post("/register/send-otp")
 @limiter.limit(AUTH_LIMIT)
 def register_send_otp(request: Request, payload: dict, db: Session = Depends(get_db)):
-    """Step 1 of registration: validate inputs, send OTP to email."""
+    """
+    Step 1 of registration.
+    - If REQUIRE_EMAIL_OTP=false (default): creates account directly, no email needed.
+    - If REQUIRE_EMAIL_OTP=true: sends OTP to email, requires verify-otp step.
+    """
     username  = (payload.get("username") or "").strip()
     email     = (payload.get("email") or "").strip()
     password  = payload.get("password") or ""
     confirm   = payload.get("confirm_password") or ""
     tenant_id = (payload.get("tenant_id") or "default").strip().upper()
+
     if not tenant_id:
         raise HTTPException(400, "Organisation ID is required.")
-
     if not username or not email or not password:
         raise HTTPException(400, "Username, email and password are required.")
     if "@" not in email:
@@ -114,16 +123,34 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
     if len(password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters.")
 
-    # Block if user already exists
     if db.query(User).filter(User.tenant_id == tenant_id, User.username == username).first():
         raise HTTPException(409, "Username already exists in this organisation.")
 
-    # Generate 6-digit OTP
-    otp       = str(random.randint(100000, 999999))
-    otp_hash  = hashlib.sha256(otp.encode()).hexdigest()
+    # ── Direct registration (OTP disabled) ────────────────────────────────────
+    if not REQUIRE_EMAIL_OTP:
+        is_first = not db.query(User).filter(User.tenant_id == tenant_id).first()
+        role     = "admin" if is_first else "operator"
+        user     = User(
+            tenant_id = tenant_id,
+            username  = username,
+            email     = email,
+            password  = hash_password(password),
+            role      = role,
+        )
+        db.add(user)
+        log_action(db, username, "REGISTER", f"tenant={tenant_id}", tenant_id)
+        db.commit()
+        return {
+            "message":      "Account created successfully! You can now log in.",
+            "otp_required": False,
+            "role":         role,
+        }
+
+    # ── OTP flow (REQUIRE_EMAIL_OTP=true) ─────────────────────────────────────
+    otp        = str(random.randint(100000, 999999))
+    otp_hash   = hashlib.sha256(otp.encode()).hexdigest()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
-    # Remove any old pending registrations for this username+tenant
     db.query(PendingRegistration).filter(
         PendingRegistration.tenant_id == tenant_id,
         PendingRegistration.username  == username,
@@ -140,7 +167,6 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
     ))
     db.commit()
 
-    # Send OTP email
     try:
         from services.email_service import send_otp_email
         ok = send_otp_email(db, email, username, otp, tenant_id)
@@ -154,7 +180,10 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
     except Exception as exc:
         raise HTTPException(500, f"Email error: {str(exc)}")
 
-    return {"message": "OTP sent to your email. It expires in 10 minutes."}
+    return {
+        "message":      "OTP sent to your email. It expires in 10 minutes.",
+        "otp_required": True,
+    }
 
 
 # ── register / verify-otp ──────────────────────────────────────────────────────
@@ -180,8 +209,8 @@ def register_verify_otp(request: Request, payload: dict, db: Session = Depends(g
     if not pending:
         raise HTTPException(400, "Invalid OTP. Please check your email and try again.")
 
-    now      = datetime.now(timezone.utc)
-    expires  = pending.expires_at
+    now     = datetime.now(timezone.utc)
+    expires = pending.expires_at
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
     if now > expires:
@@ -189,7 +218,6 @@ def register_verify_otp(request: Request, payload: dict, db: Session = Depends(g
         db.commit()
         raise HTTPException(400, "OTP has expired. Please register again.")
 
-    # Check username not taken (race condition guard)
     if db.query(User).filter(User.tenant_id == tenant_id, User.username == username).first():
         raise HTTPException(409, "Username already exists.")
 
@@ -300,7 +328,6 @@ def forgot_password_request(
         if email:
             _send_reset_email(db, user, email, raw_token, tenant_id)
 
-    # Always return the same message — never reveal whether the account exists.
     return {"message": "If that account exists, a password reset link has been sent."}
 
 
@@ -325,9 +352,8 @@ def forgot_password_confirm(
     if not row:
         raise HTTPException(400, "Invalid or already-used reset token.")
 
-    now = datetime.now(timezone.utc)
+    now     = datetime.now(timezone.utc)
     expires = row.expires_at
-    # Normalise naive timestamps stored before the migration.
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
     if now > expires:
@@ -349,7 +375,6 @@ def forgot_password_confirm(
 # ── Internal helper ────────────────────────────────────────────────────────────
 
 def _send_reset_email(db, user, email: str, raw_token: str, tenant_id: str):
-    """Fire-and-forget reset email.  Errors are logged, never raised."""
     try:
         from services.email_service import send_password_reset_email
         send_password_reset_email(db, user, email, raw_token, tenant_id)
