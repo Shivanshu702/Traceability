@@ -53,20 +53,32 @@ export default function LoginPage({ onLogin, Controls }) {
 
   // ── Register Step 1: send OTP ──────────────────────────────────────────────
   async function handleRegisterSendOtp() {
-    if (!username.trim())       { setError("Username is required."); return; }
-    if (!email.trim())          { setError("Email address is required."); return; }
-    if (!password)              { setError("Password is required."); return; }
-    if (password !== confirm)   { setError("Passwords do not match."); return; }
-    if (password.length < 6)   { setError("Password must be at least 6 characters."); return; }
-    setLoading(true); setError(""); setSuccess("");
-    try {
-      const data = await registerSendOtp(username.trim(), email.trim(), password, confirm, tenantId.trim() || "default");
-      if (data.error || data.detail) { setError(data.error || data.detail); return; }
-      setSuccess(`OTP sent to ${email}. Check your inbox.`);
-      setStep(2);
-    } catch { setError(t("cannotReachServer")); }
-    finally   { setLoading(false); }
-  }
+  if (!username.trim())     { setError("Username is required."); return; }
+  if (!email.trim())        { setError("Email address is required."); return; }
+  if (!password)            { setError("Password is required."); return; }
+  if (password !== confirm) { setError("Passwords do not match."); return; }
+  if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+  setLoading(true); setError(""); setSuccess("");
+  try {
+    const data = await registerSendOtp(
+      username.trim(), email.trim(), password, confirm,
+      tenantId.trim() || "default"
+    );
+    if (data.error || data.detail) { setError(data.error || data.detail); return; }
+
+    if (data.otp_required === false) {
+      // Direct registration — no OTP needed (REQUIRE_EMAIL_OTP=false on server)
+      setSuccess("Account created successfully! You can now log in.");
+      setTimeout(() => switchMode("login"), 2000);
+      return;
+    }
+
+    // OTP flow
+    setSuccess(`OTP sent to ${email}. Check your inbox.`);
+    setStep(2);
+  } catch { setError(t("cannotReachServer")); }
+  finally   { setLoading(false); }
+}
 
   // ── Register Step 2: verify OTP ────────────────────────────────────────────
   async function handleRegisterVerifyOtp() {
