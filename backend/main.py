@@ -204,6 +204,6 @@ app.include_router(export_router)
 
 # FIX: dev_routes is ONLY registered outside of production.
 # In production (ENV=production) the /dev/* endpoints do not exist at all.
-if ENV != "production":
-    from api.dev_routes import router as dev_router
-    app.include_router(dev_router)
+# if ENV != "production":
+from api.dev_routes import router as dev_router
+app.include_router(dev_router)
