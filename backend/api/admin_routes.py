@@ -212,7 +212,35 @@ def delete_role(role_name: str, user: dict = Depends(require_admin), db: Session
 
 @router.get("/email-settings")
 def get_email_settings_route(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    return get_email_settings(db, tenant(user))
+    s = get_email_settings(db, tenant(user))
+    return {
+        "smtp_host":             s.smtp_host             or "",
+        "smtp_port":             s.smtp_port             or 465,
+        "smtp_user":             s.smtp_user             or "",
+        "smtp_password":         s.smtp_password         or "",
+        "smtp_use_tls":          bool(s.smtp_use_tls),
+        "from_email":            s.from_email            or "",
+        "alert_recipients":      s.alert_recipients      or "",
+        "stuck_alert_enabled":   bool(s.stuck_alert_enabled),
+        "stuck_hours":           s.stuck_hours           or 1,
+        "daily_summary_enabled": bool(s.daily_summary_enabled),
+        "daily_summary_hour":    s.daily_summary_hour    or 8,
+        "fifo_alert_enabled":    bool(s.fifo_alert_enabled),
+    }
+
+
+def _coerce_bool(val) -> bool:
+    """Accept True, 'true', 'yes', '1' as True; everything else False."""
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().lower() in ("true", "yes", "1", "on")
+
+
+def _coerce_int(val, default: int) -> int:
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 @router.put("/email-settings")
@@ -227,16 +255,23 @@ def save_email_settings_route(
         row = EmailSettings(tenant_id=tid)
         db.add(row)
 
-
-    for field in (
-        "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_use_tls",
-        "from_email", "alert_recipients",
-        "stuck_alert_enabled", "stuck_hours",
-        "daily_summary_enabled", "daily_summary_hour",
-        "fifo_alert_enabled",
-    ):
+    # String fields
+    for field in ("smtp_host", "smtp_user", "smtp_password", "from_email", "alert_recipients"):
         if field in payload:
-            setattr(row, field, payload[field])
+            setattr(row, field, str(payload[field]).strip())
+
+    # Integer fields
+    if "smtp_port" in payload:
+        row.smtp_port = _coerce_int(payload["smtp_port"], 465)
+    if "stuck_hours" in payload:
+        row.stuck_hours = _coerce_int(payload["stuck_hours"], 1)
+    if "daily_summary_hour" in payload:
+        row.daily_summary_hour = _coerce_int(payload["daily_summary_hour"], 8)
+
+    # Boolean fields
+    for field in ("smtp_use_tls", "stuck_alert_enabled", "daily_summary_enabled", "fifo_alert_enabled"):
+        if field in payload:
+            setattr(row, field, _coerce_bool(payload[field]))
 
     log_action(db, user["sub"], "UPDATE_EMAIL_SETTINGS", "", tid)
     db.commit()
@@ -245,8 +280,8 @@ def save_email_settings_route(
 
 @router.post("/test-email")
 def send_test_email(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    tid      = tenant(user)
-    settings = get_email_settings(db, tid)
+    tid        = tenant(user)
+    settings   = get_email_settings(db, tid)
     recipients = [r.strip() for r in (settings.alert_recipients or "").split(",") if r.strip()]
     if not recipients:
         raise HTTPException(400, "No alert recipients configured. Add at least one email in Email & Alerts settings.")
@@ -255,4 +290,3 @@ def send_test_email(user: dict = Depends(require_admin), db: Session = Depends(g
     if not ok:
         raise HTTPException(500, "Email send failed. Check SMTP settings and server logs.")
     return {"ok": True}
-    
