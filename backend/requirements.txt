@@ -22,6 +22,9 @@ qrcode[pil]
 # Scheduler — [sqlalchemy] extra adds the persistent job store
 apscheduler[sqlalchemy]
 
+# Email
+resend
+
 # Exports
 openpyxl
 
