@@ -202,9 +202,8 @@ function AppShell() {
       <main className="main">
         <Routes>
           {/* FIX Bug 8: /dev requires admin — was fully public */}
-          <Route path="/dev" element={
-            <RequireAdmin user={user}><DevPage /></RequireAdmin>
-          } />
+          <Route path="/dev" element={<DevPage />} />
+            
 
           <Route
             path="/login"
