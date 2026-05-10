@@ -292,4 +292,4 @@ def send_test_email(user: dict = Depends(require_admin), db: Session = Depends(g
                     "Traceability – test email", "<p>Test email sent successfully.</p>")
     if not ok:
         raise HTTPException(500, "Email send failed. Check SMTP settings and server logs.")
-    return {"ok": True}
+    return {"ok": True, "sent_to": recipients}
