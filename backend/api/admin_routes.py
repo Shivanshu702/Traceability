@@ -212,20 +212,23 @@ def delete_role(role_name: str, user: dict = Depends(require_admin), db: Session
 
 @router.get("/email-settings")
 def get_email_settings_route(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    s = get_email_settings(db, tenant(user))
+    tid = tenant(user)
+    # Query DB directly — never fall back to env vars in the admin UI.
+    # Env var fallback is only for internal email sending, not for display.
+    s = db.query(EmailSettings).filter(EmailSettings.tenant_id == tid).first()
     return {
-        "smtp_host":             s.smtp_host             or "",
-        "smtp_port":             s.smtp_port             or 465,
-        "smtp_user":             s.smtp_user             or "",
-        "smtp_password":         s.smtp_password         or "",
-        "smtp_use_tls":          bool(s.smtp_use_tls),
-        "from_email":            s.from_email            or "",
-        "alert_recipients":      s.alert_recipients      or "",
-        "stuck_alert_enabled":   bool(s.stuck_alert_enabled),
-        "stuck_hours":           s.stuck_hours           or 1,
-        "daily_summary_enabled": bool(s.daily_summary_enabled),
-        "daily_summary_hour":    s.daily_summary_hour    or 8,
-        "fifo_alert_enabled":    bool(s.fifo_alert_enabled),
+        "smtp_host":             s.smtp_host             if s else "",
+        "smtp_port":             s.smtp_port             if s else 465,
+        "smtp_user":             s.smtp_user             if s else "",
+        "smtp_password":         s.smtp_password         if s else "",
+        "smtp_use_tls":          bool(s.smtp_use_tls)   if s else True,
+        "from_email":            s.from_email            if s else "",
+        "alert_recipients":      s.alert_recipients      if s else "",
+        "stuck_alert_enabled":   bool(s.stuck_alert_enabled)   if s else False,
+        "stuck_hours":           s.stuck_hours           if s else 1,
+        "daily_summary_enabled": bool(s.daily_summary_enabled) if s else False,
+        "daily_summary_hour":    s.daily_summary_hour    if s else 8,
+        "fifo_alert_enabled":    bool(s.fifo_alert_enabled)    if s else True,
     }
 
 
