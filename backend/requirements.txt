@@ -25,9 +25,6 @@ apscheduler[sqlalchemy]
 # Exports
 openpyxl
 
-# Email
-resend
-
 # Rate limiting
 slowapi
 limits

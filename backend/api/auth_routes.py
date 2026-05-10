@@ -1,3 +1,5 @@
+# C:\SHIVANSH\Traceability\backend\api\auth_routes.py
+
 import random, hashlib
 from models import PendingRegistration
 import os
