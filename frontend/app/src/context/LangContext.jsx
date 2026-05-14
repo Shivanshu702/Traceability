@@ -1,4 +1,4 @@
-// C:\SHIVANSH\Traceability\frontend\app\src\context\LangContext.jsx
+
 
 import { createContext, useContext, useEffect, useState } from "react";
 
