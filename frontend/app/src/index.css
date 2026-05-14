@@ -1,4 +1,5 @@
-/* C:\SHIVANSH\Traceability\frontend\app\src\index.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 *,
 *::before,
@@ -8,8 +9,23 @@
 
 body {
   margin: 0;
+  font-family: 'Sora', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+
+/* Override the .mono class to use JetBrains Mono */
+.mono,
+code,
+kbd,
+samp,
+pre {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 0.9em;
+  letter-spacing: -0.01em;
 }
 
 #root {
