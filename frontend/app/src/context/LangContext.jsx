@@ -1,32 +1,32 @@
-
+// C:\SHIVANSH\Traceability\frontend\app\src\context\LangContext.jsx // 
 
 import { createContext, useContext, useEffect, useState } from "react";
 
 // ── Sorted alphabetically by English language name ────────────────────────
 export const LANGUAGES = [
-  { code: "ar", label: "العربية",     flag: "🇸🇦" },   // Arabic
-  { code: "zh", label: "中文（简体）",  flag: "🇨🇳" },   // Chinese Simplified
-  { code: "cs", label: "Čeština",     flag: "🇨🇿" },   // Czech
-  { code: "da", label: "Dansk",       flag: "🇩🇰" },   // Danish
-  { code: "nl", label: "Nederlands",  flag: "🇳🇱" },   // Dutch
-  { code: "en", label: "English",     flag: "🇬🇧" },   // English
-  { code: "fi", label: "Suomi",       flag: "🇫🇮" },   // Finnish
-  { code: "fr", label: "Français",    flag: "🇫🇷" },   // French
-  { code: "de", label: "Deutsch",     flag: "🇩🇪" },   // German
-  { code: "el", label: "Ελληνικά",    flag: "🇬🇷" },   // Greek
-  { code: "hi", label: "हिन्दी",       flag: "🇮🇳" },   // Hindi
-  { code: "it", label: "Italiano",    flag: "🇮🇹" },   // Italian
-  { code: "ja", label: "日本語",        flag: "🇯🇵" },   // Japanese
-  { code: "ko", label: "한국어",        flag: "🇰🇷" },   // Korean
-  { code: "no", label: "Norsk",       flag: "🇳🇴" },   // Norwegian
-  { code: "pl", label: "Polski",      flag: "🇵🇱" },   // Polish
-  { code: "pt", label: "Português",   flag: "🇵🇹" },   // Portuguese
-  { code: "ro", label: "Română",      flag: "🇷🇴" },   // Romanian
-  { code: "ru", label: "Русский",     flag: "🇷🇺" },   // Russian
-  { code: "es", label: "Español",     flag: "🇪🇸" },   // Spanish
-  { code: "sv", label: "Svenska",     flag: "🇸🇪" },   // Swedish
-  { code: "tr", label: "Türkçe",      flag: "🇹🇷" },   // Turkish
-  { code: "uk", label: "Українська",  flag: "🇺🇦" },   // Ukrainian
+  { code: "ar", label: "العربية",        flag: "🇸🇦" },  // Arabic
+  { code: "zh", label: "中文（简体）",      flag: "🇨🇳" },  // Chinese
+  { code: "cs", label: "Čeština",        flag: "🇨🇿" },  // Czech
+  { code: "da", label: "Dansk",          flag: "🇩🇰" },  // Danish
+  { code: "nl", label: "Nederlands",     flag: "🇳🇱" },  // Dutch
+  { code: "en", label: "English",        flag: "🇬🇧" },  // English
+  { code: "fi", label: "Suomi",          flag: "🇫🇮" },  // Finnish
+  { code: "fr", label: "Français",       flag: "🇫🇷" },  // French
+  { code: "de", label: "Deutsch",        flag: "🇩🇪" },  // German
+  { code: "el", label: "Ελληνικά",       flag: "🇬🇷" },  // Greek
+  { code: "hi", label: "हिन्दी",          flag: "🇮🇳" },  // Hindi
+  { code: "it", label: "Italiano",       flag: "🇮🇹" },  // Italian
+  { code: "ja", label: "日本語",           flag: "🇯🇵" },  // Japanese
+  { code: "ko", label: "한국어",           flag: "🇰🇷" },  // Korean
+  { code: "no", label: "Norsk",          flag: "🇳🇴" },  // Norwegian
+  { code: "pl", label: "Polski",         flag: "🇵🇱" },  // Polish
+  { code: "pt", label: "Português",      flag: "🇵🇹" },  // Portuguese
+  { code: "ro", label: "Română",         flag: "🇷🇴" },  // Romanian
+  { code: "ru", label: "Русский",        flag: "🇷🇺" },  // Russian
+  { code: "es", label: "Español",        flag: "🇪🇸" },  // Spanish
+  { code: "sv", label: "Svenska",        flag: "🇸🇪" },  // Swedish
+  { code: "tr", label: "Türkçe",         flag: "🇹🇷" },  // Turkish
+  { code: "uk", label: "Українська",     flag: "🇺🇦" },  // Ukrainian
 ];
 
 const translations = {

@@ -24,17 +24,17 @@ function rebuildNext(stages) {
 
 // ── shared style tokens ───────────────────────────────────────────────────────
 const S = {
-  card:    { background:"#0D1320", border:"1px solid #1E2D42", borderRadius:12, padding:"18px 20px", marginBottom:14 },
-  label:   { fontSize:11, fontWeight:700, color:"#6B7E95", textTransform:"uppercase", letterSpacing:".07em", marginBottom:6, display:"block" },
-  input:   { width:"100%", padding:"9px 12px", borderRadius:8, border:"1px solid #1E2D42", background:"#111827", color:"#E8EFF8", fontSize:13, boxSizing:"border-box", outline:"none" },
-  select:  { width:"100%", padding:"9px 12px", borderRadius:8, border:"1px solid #1E2D42", background:"#111827", color:"#E8EFF8", fontSize:13, boxSizing:"border-box", outline:"none", cursor:"pointer" },
-  btn:     { padding:"8px 16px", borderRadius:8, border:"1px solid #1E2D42", background:"#111827", color:"#E8EFF8", fontSize:12, cursor:"pointer", fontFamily:"inherit" },
-  btnPrimary: { padding:"8px 16px", borderRadius:8, border:"none", background:"#185FA5", color:"#E6F1FB", fontSize:12, cursor:"pointer", fontWeight:700, fontFamily:"inherit" },
-  btnRed:  { padding:"8px 16px", borderRadius:8, border:"1px solid #A32D2D44", background:"rgba(163,45,45,.15)", color:"#F09595", fontSize:12, cursor:"pointer", fontFamily:"inherit" },
-  btnGreen:{ padding:"8px 16px", borderRadius:8, border:"none", background:"#27500A", color:"#C0DD97", fontSize:12, cursor:"pointer", fontWeight:700, fontFamily:"inherit" },
+  card:    { background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"18px 20px", marginBottom:14 },
+  label:   { fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:".07em", marginBottom:6, display:"block" },
+  input:   { width:"100%", padding:"9px 12px", borderRadius:8, border:"1px solid var(--border)", background:"var(--inp-bg)", color:"var(--text)", fontSize:13, boxSizing:"border-box", outline:"none", fontFamily:"inherit" },
+  select:  { width:"100%", padding:"9px 12px", borderRadius:8, border:"1px solid var(--border)", background:"var(--inp-bg)", color:"var(--text)", fontSize:13, boxSizing:"border-box", outline:"none", cursor:"pointer", fontFamily:"inherit" },
+  btn:     { padding:"8px 16px", borderRadius:8, border:"1px solid var(--border)", background:"var(--card)", color:"var(--text)", fontSize:12, cursor:"pointer", fontFamily:"inherit" },
+  btnPrimary: { padding:"8px 16px", borderRadius:8, border:"none", background:"var(--accent-dk)", color:"var(--accent-text)", fontSize:12, cursor:"pointer", fontWeight:700, fontFamily:"inherit" },
+  btnRed:  { padding:"8px 16px", borderRadius:8, border:"1px solid var(--err-border)", background:"var(--err-bg)", color:"var(--err-text)", fontSize:12, cursor:"pointer", fontFamily:"inherit" },
+  btnGreen:{ padding:"8px 16px", borderRadius:8, border:"none", background:"var(--green)", color:"var(--green-lt)", fontSize:12, cursor:"pointer", fontWeight:700, fontFamily:"inherit" },
   row:     { display:"flex", gap:10, alignItems:"flex-start" },
   tag:     (col) => ({ background:col+"22", color:col, borderRadius:5, padding:"2px 9px", fontSize:11, fontWeight:700, display:"inline-block" }),
-  sectionTitle: { fontSize:11, fontWeight:700, color:"#6B7E95", textTransform:"uppercase", letterSpacing:".08em", marginBottom:14 },
+  sectionTitle: { fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:14 },
 };
 
 // ── colour picker strip ───────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ function StageEditor({ stage, onSave, onCancel }) {
   const [form, setForm] = useState({ ...stage });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   return (
-    <div style={{ background:"#0A0F1A", border:"1px solid #378ADD44", borderRadius:10, padding:16, marginTop:8 }}>
+    <div style={{ background:"var(--bg)", border:"1px solid var(--note-border)", borderRadius:10, padding:16, marginTop:8 }}>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
         <div>
           <span style={S.label}>Stage ID (read-only)</span>
@@ -156,8 +156,8 @@ function StagesTab({ config, setConfig }) {
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ width:12, height:12, borderRadius:3, background:s.color||"#888780", flexShrink:0 }}/>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:"#E8EFF8" }}>{s.label}</div>
-                <div style={{ fontSize:11, color:"#6B7E95", marginTop:2 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{s.label}</div>
+                <div style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>
                   {s.id} · alert after {Math.round((s.stuckLimitSeconds||3600)/60)} min
                   {s.scanNote ? ` · "${s.scanNote}"` : ""}
                 </div>
@@ -182,7 +182,7 @@ function StagesTab({ config, setConfig }) {
       {!adding ? (
         <button style={{ ...S.btnGreen, marginTop:4 }} onClick={() => setAdding(true)}>+ Add stage</button>
       ) : (
-        <div style={{ ...S.card, border:"1px solid #3B6D1155" }}>
+        <div style={{ ...S.card, border:"1px solid var(--ok-border)" }}>
           <div style={S.sectionTitle}>New stage</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
             <div>
@@ -264,7 +264,7 @@ function ProjectsTab({ config, setConfig }) {
     <div>
       <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:16 }}>
         <thead>
-          <tr style={{ borderBottom:"1px solid #1E2D42" }}>
+          <tr style={{ borderBottom:"1px solid var(--border)" }}>
             {["ID","Label","Panels","Units/Panel","Units/Tray","Split","Branch",""].map(h => (
               <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontSize:10, fontWeight:700, color:"#6B7E95", textTransform:"uppercase", letterSpacing:".06em" }}>{h}</th>
             ))}
@@ -273,11 +273,11 @@ function ProjectsTab({ config, setConfig }) {
         <tbody>
           {projects.map(p => (
             <>
-              <tr key={p.id} style={{ borderBottom:"1px solid #1E2D4244" }}>
-                <td style={{ padding:"10px 10px", fontSize:12, color:"#85B7EB", fontWeight:700 }}>{p.id}</td>
-                <td style={{ padding:"10px 10px", fontSize:13, color:"#E8EFF8" }}>{p.label}</td>
-                <td style={{ padding:"10px 10px", fontSize:13, color:"#E8EFF8" }}>{p.panels}</td>
-                <td style={{ padding:"10px 10px", fontSize:13, color:"#E8EFF8" }}>{p.unitsPerPanel}</td>
+              <tr key={p.id} style={{ borderBottom:"1px solid var(--border)" }}>
+                <td style={{ padding:"10px 10px", fontSize:12, color:"var(--note-text)", fontWeight:700 }}>{p.id}</td>
+                <td style={{ padding:"10px 10px", fontSize:13, color:"var(--text)" }}>{p.label}</td>
+                <td style={{ padding:"10px 10px", fontSize:13, color:"var(--text)" }}>{p.panels}</td>
+                <td style={{ padding:"10px 10px", fontSize:13, color:"var(--text)" }}>{p.unitsPerPanel}</td>
                 <td style={{ padding:"10px 10px", fontSize:13, fontWeight:700, color:"#5DCAA5" }}>{p.unitsPerTray}</td>
                 <td style={{ padding:"10px 10px" }}><span style={S.tag("#EF9F27")}>{p.splitOverride}</span></td>
                 <td style={{ padding:"10px 10px" }}><span style={S.tag("#7F77DD")}>{p.branchOverride}</span></td>
@@ -303,7 +303,7 @@ function ProjectsTab({ config, setConfig }) {
       {!adding ? (
         <button style={S.btnGreen} onClick={() => setAdding(true)}>+ Add project</button>
       ) : (
-        <div style={{ ...S.card, border:"1px solid #3B6D1155" }}>
+        <div style={{ ...S.card, border:"1px solid var(--ok-border)" }}>
           <div style={S.sectionTitle}>New project</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:12 }}>
             <div>
@@ -344,7 +344,7 @@ function ProjectEditor({ project, onSave, onCancel }) {
   const [form, setForm] = useState({ ...project });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   return (
-    <div style={{ background:"#0A0F1A", border:"1px solid #7F77DD44", borderRadius:10, padding:16, margin:"4px 0" }}>
+    <div style={{ background:"var(--bg)", border:"1px solid var(--border)", borderRadius:10, padding:16, margin:"4px 0" }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:12 }}>
         <div>
           <span style={S.label}>Label</span>
@@ -479,8 +479,8 @@ function SplitBranchTab({ config, setConfig }) {
                   <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                     <span style={{ fontSize:20 }}>{b.icon}</span>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"#E8EFF8" }}>{b.label}</div>
-                      <div style={{ fontSize:11, color:"#6B7E95" }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{b.label}</div>
+                      <div style={{ fontSize:11, color:"var(--muted)" }}>
                         {b.id} → {b.next || "—"} · {b.scanNote||"no scan note"}
                       </div>
                     </div>
@@ -521,7 +521,7 @@ function BranchOptEditor({ stages, opt, onSave, onSaveNew, onCancel, isNew }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const handleSave = () => isNew ? onSaveNew(form) : onSave(form);
   return (
-    <div style={{ background:"#0A0F1A", border:"1px solid #7F77DD44", borderRadius:10, padding:16, marginBottom:8 }}>
+    <div style={{ background:"var(--bg)", border:"1px solid var(--border)", borderRadius:10, padding:16, marginBottom:8 }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:12 }}>
         <div>
           <span style={S.label}>Branch ID</span>
@@ -587,7 +587,7 @@ function Toggle({ value, onChange }) {
   return (
     <div onClick={() => onChange(!value)} style={{
       width:40, height:22, borderRadius:11, cursor:"pointer",
-      background: value ? "#185FA5" : "#1E2D42",
+      background: value ? "var(--accent-dk)" : "var(--border)",
       position:"relative", transition:"background .2s", flexShrink:0,
     }}>
       <div style={{
@@ -632,16 +632,16 @@ export default function PipelineConfigEditor() {
     }
   }
 
-  if (loading) return <div style={{ padding:40, color:"#6B7E95" }}>Loading pipeline config…</div>;
-  if (!config)  return <div style={{ padding:40, color:"#F09595" }}>Could not load config.</div>;
+  if (loading) return <div style={{ padding:40, color:"var(--muted)" }}>Loading pipeline config…</div>;
+  if (!config)  return <div style={{ padding:40, color:"var(--muted)" }}>Could not load config.</div>;
 
   return (
     <div style={{ maxWidth:900 }}>
       {/* Header + save */}
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:15, fontWeight:700, color:"#E8EFF8" }}>Pipeline configurator</div>
-          <div style={{ fontSize:12, color:"#6B7E95", marginTop:3 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"var(--text)" }}>Pipeline configurator</div>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:3 }}>
             Changes apply immediately after saving — no redeploy needed.
           </div>
         </div>
@@ -653,16 +653,19 @@ export default function PipelineConfigEditor() {
       {msg && (
         <div style={{
           padding:"12px 16px", borderRadius:8, marginBottom:16, fontSize:13,
-          background: msg.type==="ok" ? "rgba(59,109,17,.2)" : "rgba(163,45,45,.2)",
-          border: `1px solid ${msg.type==="ok" ? "rgba(59,109,17,.4)" : "rgba(163,45,45,.4)"}`,
-          color: msg.type==="ok" ? "#97C459" : "#F09595",
+          background:"var(--ok-bg)",
+          border:"1px solid var(--ok-border)",
+          color:"var(--ok-text)",
+          background:"var(--err-bg)",
+          border:"1px solid var(--err-border)",
+          color:"var(--err-text)",
         }}>
           {msg.text}
         </div>
       )}
 
       {/* Tabs */}
-      <div style={{ display:"flex", gap:4, marginBottom:20, borderBottom:"1px solid #1E2D42", paddingBottom:0 }}>
+      <div style={{ display:"flex", gap:4, marginBottom:20, borderBottom:"1px solid var(--border)", paddingBottom:0 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding:"9px 18px", fontSize:12, fontWeight:600, cursor:"pointer",

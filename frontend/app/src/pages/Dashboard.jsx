@@ -1,5 +1,6 @@
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\Dashboard.jsx //
 
+import { useLang } from "../context/LangContext";
 import { useEffect, useState } from "react";
 import { getStats, getAllTrays, getPipeline, getScanLog } from "../api/api";
 
@@ -260,10 +261,9 @@ function BranchModal({ stats, onClose }) {
 
 // ── Stage group (expandable tray list) ─────────────────────────────────────────
 function StageGroup({ stage, trays }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
 
-  // FIX Bug D2: renamed `t` → `theme` to avoid shadowing the reduce callback
-  // parameter, and renamed `(s, t)` → `(sum, tray)` for clarity.
   const theme      = THEME[stage.id] || THEME.CREATED;
   const totalUnits = trays.reduce((sum, tray) => sum + (tray.total_units || 0), 0);
 
@@ -300,8 +300,13 @@ function StageGroup({ stage, trays }) {
           <table className="tbl" style={{ marginTop:8 }}>
             <thead>
               <tr>
-                <th>t("Tray ID")</th><th>t("Stage")</th><th>t("Project")</th>
-                <th>t("Units")</th><th>t("Shift")</th><th>t("FIFO")</th><th>t("Age (h)")</th>
+                <th>{t("trayId_col")}</th>
+                <th>{t("stageCol")}</th>
+                <th>{t("project")}</th>
+                <th>{t("units")}</th>
+                <th>{t("shift")}</th>
+                <th>{t("fifoFlag")}</th>
+                <th>Age (h)</th>
               </tr>
             </thead>
             <tbody>
@@ -510,6 +515,7 @@ function ChartCard({ title, children, expandContent }) {
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const { t } = useLang();
   const [stats,           setStats]           = useState(null);
   const [trays,           setTrays]           = useState([]);
   const [pipeline,        setPipeline]        = useState(null);
@@ -555,7 +561,7 @@ export default function Dashboard() {
   if (loading && !stats) {
     return (
       <div style={{ padding:40, color:"var(--muted)" }}>
-        <span className="spin"/> t("Loading dashboard…")
+        <span className="spin"/> {t("loading")}
       </div>
     );
   }
