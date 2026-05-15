@@ -82,7 +82,7 @@ function StageEditor({ stage, onSave, onCancel }) {
               value={Math.round((form.stuckLimitSeconds||3600)/60)}
               onChange={e => set("stuckLimitSeconds", Number(e.target.value)*60)}
             />
-            <span style={{ color:"#6B7E95", fontSize:12 }}>minutes</span>
+            <span style={{ color:"var(--muted)", fontSize:12 }}>minutes</span>
           </div>
         </div>
       </div>
@@ -143,7 +143,7 @@ function StagesTab({ config, setConfig }) {
           {stages.map((s, i) => (
             <span key={s.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
               <span style={S.tag(s.color||"#888780")}>{s.label}</span>
-              {i < stages.length-1 && <span style={{ color:"#6B7E95", fontSize:12 }}>›</span>}
+              {i < stages.length-1 && <span style={{ color:"var(--muted)", fontSize:12 }}>›</span>}
             </span>
           ))}
         </div>
@@ -206,7 +206,7 @@ function StagesTab({ config, setConfig }) {
                 <input type="number" min={5} step={5} style={{ ...S.input, width:90 }}
                   value={Math.round(newStage.stuckLimitSeconds/60)}
                   onChange={e => setNewStage(f => ({ ...f, stuckLimitSeconds: Number(e.target.value)*60 }))}/>
-                <span style={{ color:"#6B7E95", fontSize:12 }}>minutes</span>
+                <span style={{ color:"var(--muted)", fontSize:12 }}>minutes</span>
               </div>
             </div>
           </div>
@@ -266,7 +266,7 @@ function ProjectsTab({ config, setConfig }) {
         <thead>
           <tr style={{ borderBottom:"1px solid var(--border)" }}>
             {["ID","Label","Panels","Units/Panel","Units/Tray","Split","Branch",""].map(h => (
-              <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontSize:10, fontWeight:700, color:"#6B7E95", textTransform:"uppercase", letterSpacing:".06em" }}>{h}</th>
+              <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:".06em" }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -437,7 +437,7 @@ function SplitBranchTab({ config, setConfig }) {
               <select style={S.select} value={split.atStage||""} onChange={e => setSplit("atStage", e.target.value)}>
                 {stages.map(s => <option key={s.id} value={s.id}>{s.label} ({s.id})</option>)}
               </select>
-              <div style={{ fontSize:11, color:"#6B7E95", marginTop:5 }}>
+              <div style={{ fontSize:11, color:"var(--muted)", marginTop:5 }}>
                 When a tray is scanned at this stage it splits into Part A and Part B.
               </div>
             </div>
@@ -446,7 +446,7 @@ function SplitBranchTab({ config, setConfig }) {
               <select style={S.select} value={split.resumeAtStage||""} onChange={e => setSplit("resumeAtStage", e.target.value)}>
                 {stages.map(s => <option key={s.id} value={s.id}>{s.label} ({s.id})</option>)}
               </select>
-              <div style={{ fontSize:11, color:"#6B7E95", marginTop:5 }}>
+              <div style={{ fontSize:11, color:"var(--muted)", marginTop:5 }}>
                 Both Part A and Part B begin here after splitting.
               </div>
             </div>
@@ -569,13 +569,13 @@ function SettingsTab({ config, setConfig }) {
         <div>
           <span style={S.label}>Tray ID prefix</span>
           <input style={S.input} value={tray.idPrefix||"TRY"} onChange={e => set("idPrefix", e.target.value.toUpperCase())}/>
-          <div style={{ fontSize:11, color:"#6B7E95", marginTop:5 }}>IDs will look like TRY-001, TRY-002…</div>
+          <div style={{ fontSize:11, color:"var(--muted)", marginTop:5 }}>IDs will look like TRY-001, TRY-002…</div>
         </div>
         <div>
           <span style={S.label}>Default units per tray (fallback)</span>
           <input type="number" min={1} style={S.input} value={tray.unitsPerTray||450}
             onChange={e => set("unitsPerTray", Number(e.target.value))}/>
-          <div style={{ fontSize:11, color:"#6B7E95", marginTop:5 }}>Used when a project has no specific unit count.</div>
+          <div style={{ fontSize:11, color:"var(--muted)", marginTop:5 }}>Used when a project has no specific unit count.</div>
         </div>
       </div>
     </div>
@@ -653,12 +653,9 @@ export default function PipelineConfigEditor() {
       {msg && (
         <div style={{
           padding:"12px 16px", borderRadius:8, marginBottom:16, fontSize:13,
-          background:"var(--ok-bg)",
-          border:"1px solid var(--ok-border)",
-          color:"var(--ok-text)",
-          background:"var(--err-bg)",
-          border:"1px solid var(--err-border)",
-          color:"var(--err-text)",
+          background: msg.type === "ok" ? "var(--ok-bg)"     : "var(--err-bg)",
+          border: `1px solid ${msg.type === "ok" ? "var(--ok-border)" : "var(--err-border)"}`,
+          color:      msg.type === "ok" ? "var(--ok-text)"   : "var(--err-text)",
         }}>
           {msg.text}
         </div>
@@ -670,8 +667,8 @@ export default function PipelineConfigEditor() {
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding:"9px 18px", fontSize:12, fontWeight:600, cursor:"pointer",
             fontFamily:"inherit", border:"none", background:"none",
-            color: tab===t.id ? "#378ADD" : "#6B7E95",
-            borderBottom: tab===t.id ? "2px solid #378ADD" : "2px solid transparent",
+            color: tab===t.id ? "var(--accent)" : "var(--muted)",
+            borderBottom: tab===t.id ? "2px solid var(--accent)" : "2px solid transparent",
             marginBottom:-1, transition:"color .15s",
           }}>
             {t.label}
