@@ -100,7 +100,7 @@ function AppShell() {
       { to: "/manage",          label: `🗂 ${t("manageTrays")}` },
       { to: "/alerts",          label: `🚨 ${t("alerts")}`      },
       { to: "/admin",           label: `⚙ ${t("admin")}`        },
-      { to: "/operator-report", label: `📊 Operator Report`     },
+      { to: "/operator-report", label: `📊 ${t("operatorReport")}`     },
       // /pipeline-editor intentionally removed — accessible via Admin → Pipeline Config
     ] : []),
   ];

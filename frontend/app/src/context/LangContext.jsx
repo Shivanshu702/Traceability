@@ -1,32 +1,37 @@
-// C:\SHIVANSH\Traceability\frontend\app\src\context\LangContext.jsx // 
-
+/**
+ * src/context/LangContext.jsx
+ *
+ * CHANGES:
+ * 1. LANGUAGES sorted alphabetically by English language name
+ * 2. Added missing admin tab keys: rolesPermissions, emailAlerts, pipelineConfig, auditLog
+ */
 import { createContext, useContext, useEffect, useState } from "react";
 
 // ── Sorted alphabetically by English language name ────────────────────────
 export const LANGUAGES = [
-  { code: "ar", label: "العربية",        flag: "🇸🇦" },  // Arabic
-  { code: "zh", label: "中文（简体）",      flag: "🇨🇳" },  // Chinese
-  { code: "cs", label: "Čeština",        flag: "🇨🇿" },  // Czech
-  { code: "da", label: "Dansk",          flag: "🇩🇰" },  // Danish
-  { code: "nl", label: "Nederlands",     flag: "🇳🇱" },  // Dutch
-  { code: "en", label: "English",        flag: "🇬🇧" },  // English
-  { code: "fi", label: "Suomi",          flag: "🇫🇮" },  // Finnish
-  { code: "fr", label: "Français",       flag: "🇫🇷" },  // French
-  { code: "de", label: "Deutsch",        flag: "🇩🇪" },  // German
-  { code: "el", label: "Ελληνικά",       flag: "🇬🇷" },  // Greek
-  { code: "hi", label: "हिन्दी",          flag: "🇮🇳" },  // Hindi
-  { code: "it", label: "Italiano",       flag: "🇮🇹" },  // Italian
-  { code: "ja", label: "日本語",           flag: "🇯🇵" },  // Japanese
-  { code: "ko", label: "한국어",           flag: "🇰🇷" },  // Korean
-  { code: "no", label: "Norsk",          flag: "🇳🇴" },  // Norwegian
-  { code: "pl", label: "Polski",         flag: "🇵🇱" },  // Polish
-  { code: "pt", label: "Português",      flag: "🇵🇹" },  // Portuguese
-  { code: "ro", label: "Română",         flag: "🇷🇴" },  // Romanian
-  { code: "ru", label: "Русский",        flag: "🇷🇺" },  // Russian
-  { code: "es", label: "Español",        flag: "🇪🇸" },  // Spanish
-  { code: "sv", label: "Svenska",        flag: "🇸🇪" },  // Swedish
-  { code: "tr", label: "Türkçe",         flag: "🇹🇷" },  // Turkish
-  { code: "uk", label: "Українська",     flag: "🇺🇦" },  // Ukrainian
+  { code: "ar", label: "العربية",     flag: "🇸🇦" },   // Arabic
+  { code: "zh", label: "中文（简体）",  flag: "🇨🇳" },   // Chinese Simplified
+  { code: "cs", label: "Čeština",     flag: "🇨🇿" },   // Czech
+  { code: "da", label: "Dansk",       flag: "🇩🇰" },   // Danish
+  { code: "nl", label: "Nederlands",  flag: "🇳🇱" },   // Dutch
+  { code: "en", label: "English",     flag: "🇬🇧" },   // English
+  { code: "fi", label: "Suomi",       flag: "🇫🇮" },   // Finnish
+  { code: "fr", label: "Français",    flag: "🇫🇷" },   // French
+  { code: "de", label: "Deutsch",     flag: "🇩🇪" },   // German
+  { code: "el", label: "Ελληνικά",    flag: "🇬🇷" },   // Greek
+  { code: "hi", label: "हिन्दी",       flag: "🇮🇳" },   // Hindi
+  { code: "it", label: "Italiano",    flag: "🇮🇹" },   // Italian
+  { code: "ja", label: "日本語",        flag: "🇯🇵" },   // Japanese
+  { code: "ko", label: "한국어",        flag: "🇰🇷" },   // Korean
+  { code: "no", label: "Norsk",       flag: "🇳🇴" },   // Norwegian
+  { code: "pl", label: "Polski",      flag: "🇵🇱" },   // Polish
+  { code: "pt", label: "Português",   flag: "🇵🇹" },   // Portuguese
+  { code: "ro", label: "Română",      flag: "🇷🇴" },   // Romanian
+  { code: "ru", label: "Русский",     flag: "🇷🇺" },   // Russian
+  { code: "es", label: "Español",     flag: "🇪🇸" },   // Spanish
+  { code: "sv", label: "Svenska",     flag: "🇸🇪" },   // Swedish
+  { code: "tr", label: "Türkçe",      flag: "🇹🇷" },   // Turkish
+  { code: "uk", label: "Українська",  flag: "🇺🇦" },   // Ukrainian
 ];
 
 const translations = {
@@ -118,7 +123,7 @@ const translations = {
 
   // ── Romanian ─────────────────────────────────────────────────────────────
   ro: {
-    dashboard:"Panou de control",scan:"Scanare",history:"Istoric",createTrays:"Creare t\u0103vi",manageTrays:"Gestionare t\u0103vi",alerts:"Alerte",admin:"Administrator",logout:"Deconectare",org:"org",login:"Autentificare",register:"\u00cenregistrare",forgotPw:"Parol\u0103 uitat\u0103",username:"Nume utilizator",password:"Parol\u0103",orgId:"ID organiza\u021bie",signIn:"Conectare",createAcct:"Creare cont",resetPw:"Resetare parol\u0103",scanTray:"Scanare tav\u0103",trayId:"ID tav\u0103",operatorName:"Numele operatorului",lookupTray:"C\u0103utare tav\u0103",confirmScan:"Confirmare scanare",confirmBranch:"Confirmare ramur\u0103",scanAnother:"Scanare alt\u0103 tav\u0103",openCamera:"Deschide camera",closeCamera:"\u00cenchide camera",selectSoldering:"Selecta\u021bi metoda de lipire:",loading:"Se proceseaz\u0103\u2026",cannotReachServer:"Nu se poate ajunge la server.",enterOperator:"Introduce\u021bi numele operatorului.",stage:"Etap\u0103",batch:"Lot",units:"unit\u0103\u021bi",createdBy:"Creat de",fifoViolation:"\u00eenc\u0103lcare FIFO \u00eenregistrat\u0103 pe aceast\u0103 tav\u0103",traySplit:"Tava a fost \u00eemp\u0103r\u021bit\u0103 \u00een",scanEach:"Scana\u021bi fiecare parte separat.",trayComplete:"Aceast\u0103 tav\u0103 este complet\u0103!",factoryAlerts:"Alerte fabric\u0103",noBottlenecks:"F\u0103r\u0103 blocaje \u2014 toate t\u0103vile se mi\u015fc\u0103 normal",bottleneckAlerts:"Alerte de blocaj",totalTrays:"Total t\u0103vi",completed:"Finalizate",wip:"\u00cen curs",avgCycleTime:"Timp mediu ciclu",trayId_col:"ID tav\u0103",stageCol:"Etap\u0103",project:"Proiect",stuckFor:"Blocat de",stageLoad:"Sarcin\u0103 etap\u0103",scanHistory:"Istoric scan\u0103ri",search:"C\u0103utare\u2026",operator:"Operator",from:"De la",to:"La",note:"Not\u0103",time:"Timp",fifoFlag:"FIFO",noEvents:"Nu s-au g\u0103sit evenimente de scanare.",users:"Utilizatori",addUser:"Ad\u0103ugare utilizator",role:"Rol",email:"E-mail",save:"Salvare",delete:"\u015etergere",cancel:"Anulare",project_lbl:"Proiect",shift:"Tur\u0103",batchNo:"Nr. lot",numTrays:"Num\u0103r de t\u0103vi",prefix:"Prefix ID",startIndex:"Index de start",createBtn:"Creare t\u0103vi",yes:"Da",no:"Nu",ok:"OK",error:"Eroare",success:"Succes",refresh:"Re\u00eemprosp\u0103tare",export:"Export CSV",settings:"Set\u0103ri",pipeline:"Pipeline",language:"Limb\u0103",theme:"Tem\u0103",darkMode:"\u00centunecat",lightMode:"Luminos",and:"\u015fi",
+    dashboard:"Panou de control",scan:"Scanare",history:"Istoric",createTrays:"Creare t\u0103vi",manageTrays:"Gestionare t\u0103vi",alerts:"Alerte",admin:"Administrator",logout:"Deconectare",org:"org",login:"Autentificare",register:"\u00cenregistrare",forgotPw:"Parol\u0103 uitat\u0103",username:"Nume utilizator",password:"Parol\u0103",orgId:"ID organiza\u021bie",signIn:"Conectare",createAcct:"Creare cont",resetPw:"Resetare parol\u0103",scanTray:"Scanare tav\u0103",trayId:"ID tav\u0103",operatorName:"Numele operatorului",lookupTray:"C\u0103utare tav\u0103",confirmScan:"Confirmare scanare",confirmBranch:"Confirmare ramur\u0103",scanAnother:"Scanare alt\u0103 tav\u0103",openCamera:"Deschide camera",closeCamera:"\u00bnchide camera",selectSoldering:"Selecta\u021bi metoda de lipire:",loading:"Se proceseaz\u0103\u2026",cannotReachServer:"Nu se poate ajunge la server.",enterOperator:"Introduce\u021bi numele operatorului.",stage:"Etap\u0103",batch:"Lot",units:"unit\u0103\u021bi",createdBy:"Creat de",fifoViolation:"\u00eenc\u0103lcare FIFO \u00eenregistrat\u0103 pe aceast\u0103 tav\u0103",traySplit:"Tava a fost \u00emp\u0103r\u021bit\u0103 \u00een",scanEach:"Scana\u021bi fiecare parte separat.",trayComplete:"Aceast\u0103 tav\u0103 este complet\u0103!",factoryAlerts:"Alerte fabric\u0103",noBottlenecks:"F\u0103r\u0103 blocaje \u2014 toate t\u0103vile se mi\u015fc\u0103 normal",bottleneckAlerts:"Alerte de blocaj",totalTrays:"Total t\u0103vi",completed:"Finalizate",wip:"\u00cen curs",avgCycleTime:"Timp mediu ciclu",trayId_col:"ID tav\u0103",stageCol:"Etap\u0103",project:"Proiect",stuckFor:"Blocat de",stageLoad:"Sarcin\u0103 etap\u0103",scanHistory:"Istoric scan\u0103ri",search:"C\u0103utare\u2026",operator:"Operator",from:"De la",to:"La",note:"Not\u0103",time:"Timp",fifoFlag:"FIFO",noEvents:"Nu s-au g\u0103sit evenimente de scanare.",users:"Utilizatori",addUser:"Ad\u0103ugare utilizator",role:"Rol",email:"E-mail",save:"Salvare",delete:"\u015etergere",cancel:"Anulare",project_lbl:"Proiect",shift:"Tur\u0103",batchNo:"Nr. lot",numTrays:"Num\u0103r de t\u0103vi",prefix:"Prefix ID",startIndex:"Index de start",createBtn:"Creare t\u0103vi",yes:"Da",no:"Nu",ok:"OK",error:"Eroare",success:"Succes",refresh:"Re\u00eemprosp\u0103tare",export:"Export CSV",settings:"Set\u0103ri",pipeline:"Pipeline",language:"Limb\u0103",theme:"Tem\u0103",darkMode:"\u00centunecat",lightMode:"Luminos",and:"\u015fi",
     rolesPermissions:"Roluri \u015fi permisiuni",emailAlerts:"Email \u015fi alerte",pipelineConfig:"Config. pipeline",auditLog:"Jurnal de audit",
   },
 

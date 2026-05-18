@@ -157,7 +157,7 @@ function UsersTab() {
       )}
  
       <div style={card}>
-        <div style={cardTitle}>Create New User</div>
+        <div style={cardTitle}>{t("createUser")}</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
           <div>
             <div style={lbl}>{t("username")}</div>
@@ -180,11 +180,11 @@ function UsersTab() {
       </div>
  
       <div style={{ ...card, padding:0, overflow:"hidden" }}>
-        <div style={{ ...cardTitle, padding:"14px 16px 0" }}>All Users ({users.length})</div>
+        <div style={{ ...cardTitle, padding:"14px 16px 0" }}>{t("allUsers")} ({users.length})</div>
         {loading ? <Spin /> : (
           <table className="tbl" style={{ margin:0 }}>
             <thead>
-              <tr><th>#</th><th>{t("username")}</th><th>{t("role")}</th><th>Actions</th></tr>
+              <tr><th>#</th><th>{t("username")}</th><th>{t("role")}</th><th>{t("actions")}</th></tr>
             </thead>
             <tbody>
               {users.map((u, i) => (
@@ -328,7 +328,7 @@ function RolesTab() {
           onChange={key => setNewPerms(p => permToggle(p, key))} />
         {error && <div className="err-box">{error}</div>}
         {msg   && <div className="ok-box">{msg}</div>}
-        <button className="btn btn-blue" onClick={handleCreate}>Create {t("role")}</button>
+        <button className="btn btn-blue" onClick={handleCreate}>{t("createRole")}</button>
       </div>
  
       {loading ? <Spin /> : roles.length===0 ? (
@@ -463,7 +463,7 @@ function EmailTab() {
       </div>
  
       <div style={card}>
-        <div style={cardTitle}>Notification {t("settings")}</div>
+        <div style={cardTitle}>{t("notificationSettings")}</div>
         <Grid>
           <Fld label="FIFO Alert"><EToggle value={settings.fifo_alert_enabled} onChange={v => upd("fifo_alert_enabled",v)} /></Fld>
           <Fld label="Stuck Tray Alert (hourly)"><EToggle value={settings.stuck_alert_enabled} onChange={v => upd("stuck_alert_enabled",v)} /></Fld>
@@ -476,8 +476,8 @@ function EmailTab() {
       {error && <div className="err-box">{error}</div>}
       {msg   && <div className="ok-box">{msg}</div>}
       <div style={{ display:"flex", gap:10 }}>
-        <button className="btn btn-blue" onClick={save} disabled={saving}>{saving?"Saving…":`💾 ${t("save")} Settings`}</button>
-        <button className="btn" onClick={testEmail}>📨 Send Test Email</button>
+        <button className="btn btn-blue" onClick={save} disabled={saving}>{saving?t("loading"):`💾 ${t("save")} ${t("settings")}`}</button>
+        <button className="btn" onClick={testEmail}>📨 {t("sendTestEmail")}</button>
       </div>
     </div>
   );
@@ -910,9 +910,9 @@ function PipelineTab() {
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>Pipeline configurator</div>
           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>Changes apply immediately after saving.</div>
         </div>
-        <button className="btn" style={{ fontSize:12 }} onClick={handleReset}>↩ Reset defaults</button>
+        <button className="btn" style={{ fontSize:12 }} onClick={handleReset}>↩ {t("reset defaults")}</button>
         <button className="btn btn-blue" style={{ padding:"10px 24px" }} onClick={save} disabled={saving}>
-          {saving?"Saving…":`💾 ${t("save")} pipeline`}
+          {saving?t("loading") : `💾 ${t("save")} ${t("pipeline")}`}
         </button>
       </div>
  
@@ -1085,7 +1085,7 @@ function AuditTab() {
   return (
     <div>
       <div style={{...card,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-        <input className="inp" style={{ flex:2, minWidth:180 }} placeholder={`${t("search")} user, action…`} value={filter} onChange={e=>setFilter(e.target.value)}/>
+        <input className="inp" style={{ flex:2, minWidth:180 }} placeholder={`${t("search")}`} value={filter} onChange={e=>setFilter(e.target.value)}/>
         <select className="inp" style={{ width:"auto",flex:"none" }} value={limit}
           onChange={e=>{ setLimit(+e.target.value); loadLogs(+e.target.value); }}>
           <option value={100}>Last 100</option><option value={200}>Last 200</option>

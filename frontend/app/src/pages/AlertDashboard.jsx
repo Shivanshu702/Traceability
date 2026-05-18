@@ -1,5 +1,6 @@
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\AlertDashboard.jsx //
 
+import { useLang } from "../context/LangContext";
 import { useEffect, useRef, useState } from "react";
 import { getAlerts, getStageLoad, getAnalytics, getWeeklyStats } from "../api/api";
 
@@ -81,6 +82,7 @@ function StackedBar({ data, total, height = 12 }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AlertDashboard() {
+  const { t } = useLang();
   const [alerts,      setAlerts]      = useState([]);
   const [load,        setLoad]        = useState({});
   const [analytics,   setAnalytics]   = useState(null);
@@ -164,27 +166,27 @@ export default function AlertDashboard() {
       {/* No <audio> element needed — Web Audio API generates the beep in JS */}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <h2 style={{ color: "var(--text)", margin: 0 }}>🚨 Factory Alerts</h2>
-        {hasCritical && <span className="tag tag-red" style={{ fontSize: 12 }}>CRITICAL</span>}
-        <button className="btn" style={{ marginLeft: "auto", fontSize: 12 }} onClick={fetchData}>↻ Refresh</button>
+        <h2 style={{ color: "var(--text)", margin: 0 }}>🚨 {t("factoryAlerts")}</h2>
+        {hasCritical && <span className="tag tag-red" style={{ fontSize: 12 }}>{t("critical")}</span>}
+        <button className="btn" style={{ marginLeft: "auto", fontSize: 12 }} onClick={fetchData}>↻ {t("refresh")}</button>
       </div>
 
       {analytics && (
         <div className="stat-grid" style={{ marginBottom: 20 }}>
           <div className="stat-card" style={{ borderTopColor: "#378ADD" }}>
-            <div className="stat-label">Total Trays</div>
+            <div className="stat-label">{t("totalTrays")}</div>
             <div className="stat-value" style={{ color: "#378ADD" }}>{analytics.total}</div>
           </div>
           <div className="stat-card" style={{ borderTopColor: "#3B6D11" }}>
-            <div className="stat-label">Completed</div>
+            <div className="stat-label">{t("completed")}</div>
             <div className="stat-value" style={{ color: "#3B6D11" }}>{analytics.completed}</div>
           </div>
           <div className="stat-card" style={{ borderTopColor: "#EF9F27" }}>
-            <div className="stat-label">WIP</div>
+            <div className="stat-label">{t("wip")}</div>
             <div className="stat-value" style={{ color: "#EF9F27" }}>{analytics.wip}</div>
           </div>
           <div className="stat-card" style={{ borderTopColor: "#7F77DD" }}>
-            <div className="stat-label">Avg Cycle Time</div>
+            <div className="stat-label">{t("avgCycleTime")}</div>
             <div className="stat-value" style={{ color: "#7F77DD", fontSize: 22 }}>
               {fmtTime(Math.round(analytics.avg_cycle_time_sec))}
             </div>
@@ -193,13 +195,13 @@ export default function AlertDashboard() {
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">⚠ Bottleneck Alerts ({alerts.length})</div>
+        <div className="card-title">⚠ {t("bottleneckAlerts")} ({alerts.length})</div>
         {alerts.length === 0 ? (
-          <div className="ok-box">✅ No bottlenecks — all trays moving normally</div>
+          <div className="ok-box">✅ {t("noBottlenecks")}</div>
         ) : (
           <table className="tbl">
             <thead>
-              <tr><th>Tray ID</th><th>Stage</th><th>Project</th><th>Stuck for</th></tr>
+              <tr><th>{t("trayId")}</th><th>{t("stage")}</th><th>{t("project")}</th><th>{t("stuckFor")}</th></tr>
             </thead>
             <tbody>
               {alerts.map((a, i) => (
@@ -220,7 +222,7 @@ export default function AlertDashboard() {
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">📊 Stage Load</div>
+        <div className="card-title">📊 {t("stageLoad")}</div>
         {Object.keys(load).length === 0 ? (
           <p style={{ color: "var(--muted)" }}>No active trays</p>
         ) : (
@@ -245,7 +247,7 @@ export default function AlertDashboard() {
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
             <div className="card">
-              <div className="card-title">📈 Daily scan activity (14 days)</div>
+              <div className="card-title">📈 {t("dailyScanActivity")} (14 days)</div>
               {dailyScanData.every(d => d.scans === 0) ? (
                 <div style={{ color: "var(--muted)", fontSize: 12, textAlign: "center", padding: 20 }}>No scan data yet</div>
               ) : (
@@ -254,7 +256,7 @@ export default function AlertDashboard() {
               )}
             </div>
             <div className="card">
-              <div className="card-title">✅ Daily completions (14 days)</div>
+              <div className="card-title">✅ {t("dailyCompletions")} (14 days)</div>
               {completionData.every(d => d.completions === 0) ? (
                 <div style={{ color: "var(--muted)", fontSize: 12, textAlign: "center", padding: 20 }}>No completions yet</div>
               ) : (
@@ -266,7 +268,7 @@ export default function AlertDashboard() {
 
           {shiftTotal > 0 && (
             <div className="card" style={{ marginBottom: 16 }}>
-              <div className="card-title">🌅 Shift comparison</div>
+              <div className="card-title">🌅 {t("shiftComparison")}</div>
               <div style={{ marginBottom: 12 }}>
                 <StackedBar
                   data={Object.entries(shiftTotals).map(([shift, cnt]) => ({
