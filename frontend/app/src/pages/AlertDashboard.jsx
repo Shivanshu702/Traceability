@@ -268,7 +268,7 @@ export default function AlertDashboard() {
 
           {shiftTotal > 0 && (
             <div className="card" style={{ marginBottom: 16 }}>
-              <div className="card-title">🌅 {t("shiftComparison")}</div>
+              <div className="card-title">🌅 {t("SHIFTCOMPARISON")}</div>
               <div style={{ marginBottom: 12 }}>
                 <StackedBar
                   data={Object.entries(shiftTotals).map(([shift, cnt]) => ({
