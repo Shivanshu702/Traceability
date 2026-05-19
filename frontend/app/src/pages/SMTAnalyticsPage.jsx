@@ -7,7 +7,7 @@ import {
   getYieldAnalytics,
   getCycleTimeStats,
   getUnitTestResults,
-} from "../api/integrations_api";
+} from "../api/integrations";
 
 // ── Shared chart: vertical bar ────────────────────────────────────────────────
 function BarChart({ data, valueKey, labelKey, colors, height = 130 }) {
