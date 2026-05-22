@@ -14,8 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision  = "0007"
-down_revision = "0006"
+revision  = "0007_integration_tables"
+down_revision = "0006_pending_registrations"
 branch_labels = None
 depends_on    = None
 
