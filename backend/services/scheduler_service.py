@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -157,6 +158,58 @@ def _send_daily_summary():
         logger.error("_send_daily_summary error: %s", exc, exc_info=True)
 
 
+# ── NEW: Cogiscan poll ─────────────────────────────────────────────────────────
+# FIX: sync wrapper — BackgroundScheduler uses ThreadPoolExecutor (no async).
+# FIX: local imports to avoid circular import at module load time.
+# FIX: use SessionLocal (not get_db generator) for background tasks.
+
+def _cogiscan_poll_task():
+    """
+    Runs every 30 s. Skips silently when Cogiscan is disabled or poll_sec == 0.
+    The async cogiscan.run_sync() is executed via asyncio.run() so the thread
+    scheduler can call it without an active event loop.
+    """
+    from database import SessionLocal
+    from models.integration import IntegrationConfig
+    from services.cogiscan import run_sync as cogiscan_sync
+
+    db = SessionLocal()
+    try:
+        cfg = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
+        if cfg and cfg.cogiscan_enabled and cfg.cogiscan_poll_sec > 0:
+            asyncio.run(cogiscan_sync(db, cfg))
+        else:
+            logger.debug("Cogiscan poll skipped — integration disabled or poll_sec=0")
+    except Exception as exc:
+        logger.error("Cogiscan poll error: %s", exc, exc_info=True)
+    finally:
+        db.close()
+
+
+# ── NEW: WATS hourly sync ──────────────────────────────────────────────────────
+# FIX: same sync-wrapper pattern; missing _wats_sync import added.
+
+def _wats_scheduled_task():
+    """
+    Runs every hour. Only executes the sync when wats_sync_mode == "scheduled".
+    The async wats.run_sync() is executed via asyncio.run().
+    """
+    from database import SessionLocal
+    from models.integration import IntegrationConfig
+    from services.wats import run_sync as wats_sync   # FIX: was missing
+
+    db = SessionLocal()
+    try:
+        cfg = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
+        if cfg and cfg.wats_enabled and cfg.wats_sync_mode == "scheduled":
+            asyncio.run(wats_sync(db, cfg))
+        else:
+            logger.debug("WATS scheduled sync skipped — not enabled or mode != scheduled")
+    except Exception as exc:
+        logger.error("WATS scheduled sync error: %s", exc, exc_info=True)
+    finally:
+        db.close()
+
 # ── Lifecycle ──────────────────────────────────────────────────────────────────
 
 def start_scheduler():
@@ -182,11 +235,33 @@ def start_scheduler():
         replace_existing   = True,
         misfire_grace_time = 600,
     )
+    
+    # FIX: both new jobs registered HERE, not at module level.
+    # Cogiscan poll runs every 30 s; the task checks configured interval itself.
+    scheduler.add_job(
+        _cogiscan_poll_task,
+        trigger            = "interval",
+        seconds            = 30,
+        id                 = "cogiscan_poll",
+        replace_existing   = True,
+        misfire_grace_time = 60,
+    )
+
+    # WATS hourly sync; the task checks wats_sync_mode itself.
+    scheduler.add_job(
+        _wats_scheduled_task,
+        trigger            = "interval",
+        hours              = 1,
+        id                 = "wats_hourly_sync",
+        replace_existing   = True,
+        misfire_grace_time = 300,
+    )
 
     scheduler.start()
     logger.info(
         "APScheduler started with SQLAlchemy job store — "
         "stuck-tray check (hourly) + daily summary (per-tenant hour)"
+        "+ Cogiscan poll (30 s) + WATS hourly sync"
     )
 
 

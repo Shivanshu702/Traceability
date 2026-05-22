@@ -274,7 +274,7 @@ function StageGroup({ stage, trays }) {
     }}>
       <div onClick={() => setOpen(o => !o)} style={{
         display:"flex", alignItems:"center", gap:10,
-        padding:"11px 14px", cursor:"pointer", background:theme.bg,
+        padding:"11px 14px", cursor:"pointer", background:`color-mix(in srgb, ${theme.accent} 8%, var(--card))`,
       }}>
         <span style={{ fontSize:13, fontWeight:600, flex:1, color:"var(--text)" }}>
           {stage.label}

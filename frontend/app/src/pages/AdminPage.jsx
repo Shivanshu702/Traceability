@@ -1,6 +1,7 @@
 
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\AdminPage.jsx //
  
+import { IntegrationsTab } from "../routes/integrationRoutes";
 import React, { useState, useEffect } from "react";
 import {
   getAdminPipelineConfig, saveAdminPipelineConfig, resetPipelineConfig,
@@ -23,6 +24,7 @@ export default function AdminPage() {
     { key:"pipeline", label:`🔧 ${t("pipelineConfig")}` },
     { key:"export",   label:`⬇ ${t("export")}` },
     { key:"audit",    label:`📋 ${t("auditLog")}` },
+    { key: "integrations", label: `🔌 ${t("integrations") || "Integrations"}` },
   ];
  
   return (
@@ -41,6 +43,7 @@ export default function AdminPage() {
       {tab==="pipeline" && <PipelineTab />}
       {tab==="export"   && <ExportTab />}
       {tab==="audit"    && <AuditTab />}
+      {tab === "integrations" && <IntegrationsTab />}
     </div>
   );
 }

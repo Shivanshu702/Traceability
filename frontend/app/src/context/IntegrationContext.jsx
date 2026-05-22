@@ -1,5 +1,3 @@
-//  C:\SHIVANSH\Traceability\frontend\app\src\context\IntegrationContext.jsx
-
 // src/context/IntegrationContext.jsx
 // Provides integration config (Cogiscan + WATS) to the whole app.
 // Wrap this around <App /> in main.jsx AFTER LangProvider and ThemeProvider.

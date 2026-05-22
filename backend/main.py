@@ -4,6 +4,9 @@ import logging.config
 import os
 from contextlib import asynccontextmanager
 
+from routes.integrations  import router as integrations_router
+from routes.analytics_smt import router as smt_analytics_router
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -201,9 +204,13 @@ app.include_router(tray_router)
 app.include_router(admin_router)
 app.include_router(analytics_router)
 app.include_router(export_router)
+app.include_router(integrations_router)
+app.include_router(smt_analytics_router)
 
 # FIX: dev_routes is ONLY registered outside of production.
 # In production (ENV=production) the /dev/* endpoints do not exist at all.
 # if ENV != "production":
 from api.dev_routes import router as dev_router
 app.include_router(dev_router)
+
+from models import integration as _integration_models  # noqa: F401

@@ -1,5 +1,3 @@
-// C:\SHIVANSH\Traceability\frontend\app\src\routes\integrationRoutes.jsx //
-
 // src/routes/integrationRoutes.jsx
 // One import drops the SMT Analytics nav item + route into App.jsx.
 //

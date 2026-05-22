@@ -1,5 +1,6 @@
 // C:\SHIVANSH\Traceability\frontend\app\src\main.jsx //
 
+import { IntegrationProvider } from "./context/IntegrationContext";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
@@ -11,7 +12,9 @@ createRoot(document.getElementById("root")).render(
   <StrictMode>
     <ThemeProvider>
       <LangProvider>
-        <App />
+        <IntegrationProvider>
+          <App />
+        </IntegrationProvider>
       </LangProvider>
     </ThemeProvider>
   </StrictMode>

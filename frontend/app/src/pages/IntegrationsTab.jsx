@@ -10,7 +10,7 @@ import {
   syncWatsNow,
   syncCogiscanNow,
   getCogiscanWebhookUrl,
-} from "../api/integrations_api";
+} from "../api/integrations";
 
 // ── Shared mini-components ────────────────────────────────────────────────────
 function Row({ label, children }) {
