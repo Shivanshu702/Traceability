@@ -114,3 +114,14 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 def tenant(user: dict) -> str:
     return user.get("tenant_id", "default")
+
+
+def require_role(*roles: str):
+    def _guard(user: dict = Depends(get_current_user)) -> dict:
+        if user.get("role") not in roles:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access requires one of: {', '.join(roles)}"
+            )
+        return user
+    return _guard
