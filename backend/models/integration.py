@@ -48,7 +48,7 @@ class UnitTestResult(Base):
 
     id               = Column(Integer, primary_key=True, autoincrement=True)
     unit_serial      = Column(String,  nullable=False, index=True)
-    tray_id          = Column(String,  nullable=False, index=True)
+    tray_id          = Column(String,  nullable=True, index=True)
     wats_result_id   = Column(String,  nullable=True)   # WATS internal ID
 
     # Timestamps for cycle-time calculation

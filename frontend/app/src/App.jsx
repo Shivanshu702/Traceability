@@ -1,6 +1,7 @@
 // C:\SHIVANSH\Traceability\frontend\app\src\App.jsx //
 
-import { SMT_NAV, SMT_ROUTE, IntegrationsTab } from "./routes/integrationRoutes";
+import IntegrationsTab   from "./pages/IntegrationsTab";
+import { SMT_NAV, SMT_ROUTE } from "./routes/integrationRoutes";
 import { useEffect, useState } from "react";
 import {
   BrowserRouter,
@@ -102,6 +103,8 @@ function AppShell() {
       { to: "/alerts",          label: `🚨 ${t("alerts")}`      },
       { to: "/admin",           label: `⚙ ${t("admin")}`        },
       { to: "/operator-report", label: `📊 ${t("operatorReport")}`     },
+      { to: "/smt",             label: SMT_NAV.label },
+      { to: "/integrations", label: "🔌 Integrations" },
       // /pipeline-editor intentionally removed — accessible via Admin → Pipeline Config
     ] : []),
   ];
@@ -203,7 +206,8 @@ function AppShell() {
       <main className="main">
         <Routes>
           {/* FIX Bug 8: /dev requires admin — was fully public */}
-          <Route path="/dev" element={<DevPage />} />
+          <Route path="/dev" element={
+            <RequireAdmin user={user}><DevPage /></RequireAdmin>} />
             
 
           <Route
@@ -241,6 +245,13 @@ function AppShell() {
           } />
           <Route path="/admin" element={
             <RequireAdmin user={user}><AdminPage /></RequireAdmin>
+          } />
+          {/* ── SMT Analytics route — added ──────────────────────────────── */}
+          <Route path="/smt" element={
+            <RequireAdmin user={user}><SMT_ROUTE.component /></RequireAdmin>
+          } />
+          <Route path="/integrations" element={
+            <RequireAdmin user={user}><IntegrationsTab /></RequireAdmin>
           } />
 
           <Route path="*" element={<Navigate to="/" replace />} />

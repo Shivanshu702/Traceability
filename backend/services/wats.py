@@ -139,9 +139,9 @@ def _parse_wats_result(raw: Dict[str, Any], db: Session) -> UnitTestResult:
         existing.test_completed_at = completed_at
         existing.measurements      = measurements
         existing.raw_wats_payload  = raw
-        return existing
+        return False, existing
 
-    return UnitTestResult(
+    return True, UnitTestResult(
         unit_serial       = serial,
         tray_id           = tray_id,
         wats_result_id    = wats_id,
@@ -178,12 +178,12 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
 
     for raw in raw_results:
         try:
-            record = _parse_wats_result(raw, db)
-            if record.id:
-                results_updated += 1
-            else:
+            is_new, record = _parse_wats_result(raw, db)
+            if is_new:
                 db.add(record)
                 results_created += 1
+            else:
+                results_updated += 1
         except Exception as exc:
             serial = raw.get("serialNumber", "?")
             errors.append(f"Unit {serial}: {exc}")

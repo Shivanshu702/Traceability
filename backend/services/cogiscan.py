@@ -123,7 +123,7 @@ def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any]) -> Optional[
     unit_count  = panel.get("unit_count", 1)
 
     # Get the first pipeline stage that comes AFTER the SMT line
-    pipeline    = get_pipeline(db)
+    pipeline = get_pipeline(db=db)
     first_stage = pipeline.stages[0].id if pipeline and pipeline.stages else "RACK1_TOP"
 
     try:

@@ -164,23 +164,28 @@ def _send_daily_summary():
 # FIX: use SessionLocal (not get_db generator) for background tasks.
 
 def _cogiscan_poll_task():
-    """
-    Runs every 30 s. Skips silently when Cogiscan is disabled or poll_sec == 0.
-    The async cogiscan.run_sync() is executed via asyncio.run() so the thread
-    scheduler can call it without an active event loop.
-    """
+    """..."""
     from database import SessionLocal
     from models.integration import IntegrationConfig
     from services.cogiscan import run_sync as cogiscan_sync
-
     db = SessionLocal()
     try:
         cfg = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
         if cfg and cfg.cogiscan_enabled and cfg.cogiscan_poll_sec > 0:
+            # Respect the configured interval — scheduler ticks every 30s
+            # but only actually syncs once enough time has passed
+            if cfg.cogiscan_last_sync:
+                elapsed = (datetime.now(timezone.utc) - cfg.cogiscan_last_sync).total_seconds()
+                if elapsed < cfg.cogiscan_poll_sec:
+                    logger.debug(
+                        "Cogiscan poll skipped — %ds elapsed, interval=%ds",
+                        int(elapsed), cfg.cogiscan_poll_sec,
+                    )
+                    return
             asyncio.run(cogiscan_sync(db, cfg))
         else:
             logger.debug("Cogiscan poll skipped — integration disabled or poll_sec=0")
-    except Exception as exc:
+    except Exception as exc: 
         logger.error("Cogiscan poll error: %s", exc, exc_info=True)
     finally:
         db.close()
