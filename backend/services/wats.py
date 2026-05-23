@@ -96,40 +96,37 @@ async def fetch_results(
 
 # ── Upsert helper ─────────────────────────────────────────────────────────────
 
-def _parse_wats_result(raw: Dict[str, Any], db: Session) -> UnitTestResult:
-    """
-    Map a raw WATS result dict to a UnitTestResult ORM object.
-    Adapts field names from the WATS API response to our schema.
-    """
+def _parse_wats_result(raw: Dict[str, Any], db: Session):
+    from models.integration import SmtUnitEvent
+
     serial       = raw.get("serialNumber") or raw.get("serial_number", "")
     wats_id      = str(raw.get("id", ""))
     status_raw   = raw.get("status", "").lower()
     status       = "PASS" if "pass" in status_raw else "FAIL"
 
-    # Parse timestamps
     started_str  = raw.get("started") or raw.get("startTime")
-    started_at   = datetime.fromisoformat(started_str.replace("Z", "+00:00")) if started_str else None
+    started_at   = datetime.fromisoformat(
+                       started_str.replace("Z", "+00:00")
+                   ) if started_str else None
     duration_sec = int(raw.get("duration", 0) or 0)
     completed_at = (started_at + timedelta(seconds=duration_sec)) if started_at and duration_sec else None
 
-    # Failure details
     fail_code    = raw.get("failureCode") or raw.get("failure_code")
     fail_step    = raw.get("failedStep")  or raw.get("failed_step")
-
-    # Try to find the matching tray and SMT exit time
-    tray_id: str   = ""
-    smt_exit_at    = None
-    smt_evt = db.query(SmtEvent).filter(
-        SmtEvent.datamatrix_code.contains(serial.split("-")[0]) if "-" in serial else SmtEvent.datamatrix_code == serial
-    ).order_by(SmtEvent.created_at.desc()).first()
-    if smt_evt:
-        tray_id    = smt_evt.tray_id or ""
-        smt_exit_at = smt_evt.smt_exit_at
-
-    # Measurements — grab the step results as JSON for future analytics
     measurements = raw.get("stepResults") or raw.get("measurements") or []
 
-    existing = db.query(UnitTestResult).filter(UnitTestResult.wats_result_id == wats_id).first()
+    # Get SMT exit time from unit-level event (most accurate)
+    smt_exit_at = None
+    unit_evt = db.query(SmtUnitEvent).filter(
+        SmtUnitEvent.unit_serial == serial
+    ).order_by(SmtUnitEvent.created_at.desc()).first()
+    if unit_evt:
+        smt_exit_at = unit_evt.smt_exit_at
+
+    # Upsert if already stored
+    existing = db.query(UnitTestResult).filter(
+        UnitTestResult.wats_result_id == wats_id
+    ).first()
     if existing:
         existing.status            = status
         existing.failure_code      = fail_code
@@ -141,9 +138,22 @@ def _parse_wats_result(raw: Dict[str, Any], db: Session) -> UnitTestResult:
         existing.raw_wats_payload  = raw
         return False, existing
 
+    # Count prior runs for this serial to assign run number
+    prior_runs = db.query(UnitTestResult).filter(
+        UnitTestResult.unit_serial == serial
+    ).count()
+    run_number = prior_runs + 1
+
+    # is_final_pass: True only if this run is PASS and no prior PASS exists
+    prior_pass = db.query(UnitTestResult).filter(
+        UnitTestResult.unit_serial == serial,
+        UnitTestResult.status      == "PASS",
+    ).first()
+    is_final_pass = (status == "PASS" and prior_pass is None)
+
     return True, UnitTestResult(
         unit_serial       = serial,
-        tray_id           = tray_id,
+        tray_id           = None,
         wats_result_id    = wats_id,
         smt_exit_at       = smt_exit_at,
         test_started_at   = started_at,
@@ -152,6 +162,8 @@ def _parse_wats_result(raw: Dict[str, Any], db: Session) -> UnitTestResult:
         status            = status,
         failure_code      = fail_code,
         failure_step      = fail_step,
+        run_number        = run_number,
+        is_final_pass     = is_final_pass,
         measurements      = measurements,
         raw_wats_payload  = raw,
     )

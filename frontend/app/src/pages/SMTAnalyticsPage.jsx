@@ -1,5 +1,6 @@
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\SMTAnalyticsPage.jsx
 
+import { getUnitJourney, downloadUnitJourney } from "../api/integrations";
 import { useEffect, useState, useCallback } from "react";
 import { useLang } from "../context/LangContext";
 import {
@@ -119,6 +120,9 @@ export default function SmtAnalyticsPage() {
   const [units,     setUnits]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loadErr,   setLoadErr]   = useState("");
+  const [journey,    setJourney]    = useState([]);
+  const [journeyTab, setJourneyTab] = useState(false);
+  const [projFilter, setProjFilter] = useState("");
 
   // Table filters
   const [search,     setSearch]     = useState("");
@@ -129,16 +133,18 @@ export default function SmtAnalyticsPage() {
   const load = useCallback(async () => {
     setLoading(true); setLoadErr("");
     try {
-      const [sum, y, ct, u] = await Promise.all([
+      const [sum, y, ct, u, j] = await Promise.all([
         getSmtDashboardSummary(),
         getYieldAnalytics(14),
         getCycleTimeStats(),
         getUnitTestResults({ limit: 500 }),
+        getUnitJourney({ limit: 500 }),
       ]);
       setSummary(sum || {});
       setYield14(Array.isArray(y?.daily) ? y.daily : []);
       setCycleStat(ct || null);
       setUnits(Array.isArray(u) ? u : []);
+      setJourney(Array.isArray(j) ? j : []);
     } catch (e) {
       if (e.message !== "SESSION_EXPIRED")
         setLoadErr("Failed to load SMT analytics. Check that the WATS integration is configured and enabled.");
@@ -385,6 +391,86 @@ export default function SmtAnalyticsPage() {
           </>
         )}
       </div>
+      {/* Unit Journey section */}
+<div className="card" style={{ marginTop: 16 }}>
+  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+    <div className="card-title" style={{ marginBottom: 0 }}>🔬 Unit Journey (SMT → Test)</div>
+    <button className="btn btn-blue" style={{ fontSize: 11, padding: "5px 12px", marginLeft: "auto" }}
+      onClick={() => downloadUnitJourney(projFilter)}>
+      ⬇ Download CSV
+    </button>
+  </div>
+
+  <div style={{ overflowX: "auto" }}>
+    <table className="tbl">
+      <thead>
+        <tr>
+          <th>Unit serial</th>
+          <th>Panel</th>
+          <th>Position</th>
+          <th>Project</th>
+          <th>SMT exit</th>
+          <th>SMT dur.</th>
+          <th>First test</th>
+          <th>SMT→Test</th>
+          <th>Runs</th>
+          <th>Final status</th>
+          <th>Pass on run</th>
+          <th>SMT→Pass</th>
+          <th>Fail codes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {journey.map((u, i) => {
+          const failCodes = [...new Set(
+            u.test_runs.filter(r => r.failure_code).map(r => r.failure_code)
+          )];
+          return (
+            <tr key={u.unit_serial || i}>
+              <td><span className="mono" style={{ fontSize: 11 }}>{u.unit_serial}</span></td>
+              <td><span className="mono" style={{ fontSize: 11 }}>{u.panel_id}</span></td>
+              <td style={{ fontSize: 12, color: "var(--muted)" }}>{u.position || "—"}</td>
+              <td style={{ fontSize: 12 }}>{u.project_id || "—"}</td>
+              <td style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>{fmtDate(u.smt_exit_at)}</td>
+              <td><span className="tag tag-gray">{fmtTime(u.smt_duration_sec)}</span></td>
+              <td style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>{fmtDate(u.first_test_at)}</td>
+              <td>
+                <span className={`tag ${u.smt_to_first_test_sec > 86400 ? "tag-red" : "tag-green"}`}>
+                  {fmtTime(u.smt_to_first_test_sec)}
+                </span>
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <span className={`tag ${u.total_runs > 1 ? "tag-amber" : "tag-gray"}`}>
+                  {u.total_runs}
+                </span>
+              </td>
+              <td><StatusTag status={u.final_status} /></td>
+              <td style={{ textAlign: "center", fontSize: 12 }}>
+                {u.pass_run_number
+                  ? <span className={`tag ${u.pass_run_number > 1 ? "tag-amber" : "tag-green"}`}>
+                      Run {u.pass_run_number}
+                    </span>
+                  : <span style={{ color: "var(--muted)" }}>—</span>}
+              </td>
+              <td>
+                <span className={`tag ${u.smt_to_pass_sec > 172800 ? "tag-red" : u.smt_to_pass_sec > 86400 ? "tag-amber" : "tag-green"}`}>
+                  {fmtTime(u.smt_to_pass_sec)}
+                </span>
+              </td>
+              <td>
+                {failCodes.length > 0
+                  ? failCodes.map(c => (
+                      <span key={c} className="tag tag-red" style={{ fontSize: 10, marginRight: 3 }}>{c}</span>
+                    ))
+                  : <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+</div>
     </div>
   );
 }

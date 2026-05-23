@@ -100,64 +100,75 @@ async def fetch_new_panels(
 
 def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any]) -> Optional[str]:
     """
-    Given a Cogiscan panel dict, create a tray in the traceability system
-    and return the new tray_id, or None if already processed.
-
-    This calls the existing tray_service logic so all the same business rules
-    (FIFO, audit logging, etc.) apply.
+    Record panel + individual unit SMT events.
+    No tray created — SMT and QR flows are fully separate.
     """
-    from services.tray_service import create_tray   # local import to avoid circular
-    from core.stages import get_pipeline             # get first post-SMT stage
+    from models.integration import SmtUnitEvent
 
-    panel_id = panel.get("panel_id") or panel.get("id")
-    barcode  = panel.get("barcode")  or panel.get("datamatrix_code")
+    panel_id   = panel.get("panel_id") or panel.get("id")
+    barcode    = panel.get("barcode")  or panel.get("datamatrix_code")
+    project_id = panel.get("project")
+    unit_count = panel.get("unit_count", 1)
+    units      = panel.get("units", [])  # [{"serial": "XYZ-01", "position": "U1"}, ...]
 
-    # Skip if already processed
     existing = db.query(SmtEvent).filter(SmtEvent.panel_id == panel_id).first()
     if existing and existing.processed:
         log.debug("Panel %s already processed — skipping", panel_id)
         return None
 
-    # Map Cogiscan project name → your project ID (adjust mapping as needed)
-    project_id  = panel.get("project")
-    unit_count  = panel.get("unit_count", 1)
+    def _parse_dt(val):
+        if not val:
+            return None
+        return datetime.fromisoformat(str(val).replace("Z", "+00:00"))
 
-    # Get the first pipeline stage that comes AFTER the SMT line
-    pipeline = get_pipeline(db=db)
-    first_stage = pipeline.stages[0].id if pipeline and pipeline.stages else "RACK1_TOP"
+    smt_exit_at  = _parse_dt(panel.get("exit_time")  or panel.get("smt_exit_at"))
+    smt_entry_at = _parse_dt(panel.get("entry_time") or panel.get("smt_entry_at"))
 
     try:
-        tray = create_tray(
-            db,
-            project    = project_id,
-            units      = unit_count,
-            stage      = first_stage,
-            created_by = "cogiscan_auto",
-            notes      = f"Auto-created from Cogiscan panel {panel_id} | DataMatrix: {barcode}",
-        )
-        tray_id = tray.id
-
-        # Record the SMT event
-        exit_str = panel.get("exit_time") or panel.get("smt_exit_at")
-        smt_event = SmtEvent(
+        # Panel-level record
+        db.add(SmtEvent(
             panel_id             = panel_id,
             datamatrix_code      = barcode or "",
-            smt_exit_at          = datetime.fromisoformat(exit_str) if exit_str else None,
+            smt_exit_at          = smt_exit_at,
             unit_count           = unit_count,
             project_id           = project_id,
-            tray_id              = tray_id,
+            tray_id              = None,
             processed            = True,
             raw_cogiscan_payload = panel,
-        )
-        db.add(smt_event)
-        db.commit()
+        ))
 
-        log.info("Auto-created tray %s from Cogiscan panel %s", tray_id, panel_id)
-        return tray_id
+        # Unit-level records
+        if units:
+            # Cogiscan sent individual unit data
+            for u in units:
+                db.add(SmtUnitEvent(
+                    panel_id     = panel_id,
+                    unit_serial  = u.get("serial", ""),
+                    position     = u.get("position"),
+                    project_id   = project_id,
+                    smt_entry_at = smt_entry_at,
+                    smt_exit_at  = smt_exit_at,
+                ))
+        else:
+            # Derive serials from barcode — e.g. XYZ123456-01 … XYZ123456-09
+            for i in range(1, unit_count + 1):
+                serial = f"{barcode}-{i:02d}" if barcode else f"{panel_id}-{i:02d}"
+                db.add(SmtUnitEvent(
+                    panel_id     = panel_id,
+                    unit_serial  = serial,
+                    position     = f"U{i}",
+                    project_id   = project_id,
+                    smt_entry_at = smt_entry_at,
+                    smt_exit_at  = smt_exit_at,
+                ))
+
+        db.commit()
+        log.info("Recorded panel %s — %d units", panel_id, unit_count)
+        return panel_id
 
     except Exception as exc:
         db.rollback()
-        log.error("Failed to auto-create tray for panel %s: %s", panel_id, exc)
+        log.error("Failed to record panel %s: %s", panel_id, exc)
         raise
 
 

@@ -43,3 +43,13 @@ export const getSmtDashboardSummary = () => _iapi("/api/analytics/smt-summary");
 
 // ── Webhook registration (optional) ──────────────────────────────────────────
 export const getCogiscanWebhookUrl = () => `${BASE}/api/webhooks/cogiscan`;
+
+export const getUnitJourney = (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return _iapi(`/api/analytics/unit-journey${q ? "?" + q : ""}`);
+};
+
+export const downloadUnitJourney = (project = "") => {
+    const q = project ? `?project=${encodeURIComponent(project)}` : "";
+    window.open(`${BASE}/api/analytics/unit-journey/export${q}`, "_blank");
+};

@@ -75,6 +75,10 @@ class UnitTestResult(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    run_number    = Column(Integer, nullable=False, default=1)
+    is_final_pass = Column(Boolean, nullable=False, default=False)
+                           
+
 
 class SmtEvent(Base):
     """
@@ -98,3 +102,16 @@ class SmtEvent(Base):
     raw_cogiscan_payload = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class SmtUnitEvent(Base):
+    """One row per individual unit on a Cogiscan panel."""
+    __tablename__ = "smt_unit_events"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    panel_id     = Column(String,  nullable=False, index=True)
+    unit_serial  = Column(String,  nullable=False, index=True)
+    position     = Column(String,  nullable=True)
+    project_id   = Column(String,  nullable=True)
+    smt_entry_at = Column(DateTime(timezone=True), nullable=True)
+    smt_exit_at  = Column(DateTime(timezone=True), nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())
