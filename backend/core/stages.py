@@ -1,3 +1,5 @@
+# C:\SHIVANSH\Traceability\backend\core\stages.py
+
 STAGES = [
     {"id": "CREATED",    "label": "Label Printed",             "next": "RACK1_TOP"},
     {"id": "RACK1_TOP",  "label": "Rack 1 (Top Side)",          "next": "RACK2_BTM"},
