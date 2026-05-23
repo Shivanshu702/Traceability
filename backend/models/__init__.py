@@ -1,4 +1,4 @@
-# C:\SHIVANSH\Traceability\backend\models.py
+# C:\SHIVANSH\Traceability\backend\models\__init__.py
 
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, UniqueConstraint
 from database import Base
