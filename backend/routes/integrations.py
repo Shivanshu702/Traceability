@@ -23,7 +23,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from core.auth import require_role          # reuse existing admin guard
+from core.auth import require_admin          # reuse existing admin guard
 from database import get_db
 from models.integration import IntegrationConfig, SmtEvent
 from schemas.integration import (
@@ -58,7 +58,7 @@ def _get_or_create_config(db: Session) -> IntegrationConfig:
 @router.get(
     "/api/integrations/config",
     response_model=IntegrationConfigOut,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 def get_config(db: Session = Depends(get_db)):
     return _get_or_create_config(db)
@@ -67,7 +67,7 @@ def get_config(db: Session = Depends(get_db)):
 @router.post(
     "/api/integrations/config",
     response_model=IntegrationConfigOut,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 def save_config(body: IntegrationConfigIn, db: Session = Depends(get_db)):
     cfg = _get_or_create_config(db)
@@ -93,7 +93,7 @@ def save_config(body: IntegrationConfigIn, db: Session = Depends(get_db)):
 @router.post(
     "/api/integrations/cogiscan/test",
     response_model=ConnectionTestResult,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 async def test_cogiscan(db: Session = Depends(get_db)):
     cfg = _get_or_create_config(db)
@@ -104,7 +104,7 @@ async def test_cogiscan(db: Session = Depends(get_db)):
 @router.post(
     "/api/integrations/cogiscan/sync",
     response_model=CogiscanSyncResult,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 async def sync_cogiscan(db: Session = Depends(get_db)):
     cfg = _get_or_create_config(db)
@@ -122,7 +122,7 @@ async def sync_cogiscan(db: Session = Depends(get_db)):
 @router.post(
     "/api/integrations/wats/test",
     response_model=ConnectionTestResult,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 async def test_wats(db: Session = Depends(get_db)):
     cfg = _get_or_create_config(db)
@@ -133,7 +133,7 @@ async def test_wats(db: Session = Depends(get_db)):
 @router.post(
     "/api/integrations/wats/sync",
     response_model=WatsSyncResult,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 async def sync_wats(db: Session = Depends(get_db)):
     cfg = _get_or_create_config(db)
