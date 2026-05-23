@@ -67,6 +67,72 @@ export default function OperatorReportPage() {
   const totalFifo  = operators.reduce((s, o) => s + o.fifo_flags,   0);
   const activeOps  = operators.length;
 
+  function downloadCSV() {
+    const allStages = [...new Set(operators.flatMap(op => Object.keys(op.stages || {})))];
+    const rows = [];
+
+    // ── Section 1: Operator summary ──────────────────────────────────────────
+    rows.push([`Operator Report — Last ${days} days`]);
+    rows.push([`Generated: ${new Date().toLocaleString("en-GB")}`]);
+    rows.push([]);
+    rows.push(["OPERATOR SUMMARY"]);
+    rows.push(["Operator", "Total Scans", "Trays Touched", "FIFO Flags", "Scan Rate (per day)", "Top Stage", "Top Stage Count"]);
+
+    operators.forEach(op => {
+      const topStage = Object.entries(op.stages || {}).sort((a, b) => b[1] - a[1])[0];
+      const scanRate = op.total_scans > 0 ? Math.round(op.total_scans / days) : 0;
+      rows.push([
+        op.operator,
+        op.total_scans,
+        op.unique_trays,
+        op.fifo_flags,
+        scanRate,
+        topStage?.[0] || "",
+        topStage?.[1] || "",
+      ]);
+    });
+
+    // ── Section 2: Stage breakdown ────────────────────────────────────────────
+    rows.push([]);
+    rows.push(["STAGE BREAKDOWN — SCANS PER OPERATOR"]);
+    rows.push(["Operator", ...allStages]);
+
+    operators.forEach(op => {
+      rows.push([
+        op.operator,
+        ...allStages.map(s => op.stages?.[s] || 0),
+      ]);
+    });
+
+    // ── Section 3: Daily activity (last 7 days) ───────────────────────────────
+    rows.push([]);
+    rows.push(["DAILY ACTIVITY — LAST 7 DAYS"]);
+    const last7Labels = Array.from({ length: 7 }, (_, i) =>
+      new Date(Date.now() - (6 - i) * 86400000).toISOString().slice(0, 10)
+    );
+    rows.push(["Operator", ...last7Labels]);
+
+    operators.forEach(op => {
+      rows.push([
+        op.operator,
+        ...last7Labels.map(day => op.daily?.[day] || 0),
+      ]);
+    });
+
+    // ── Export ────────────────────────────────────────────────────────────────
+    const csv = rows
+      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `operator_report_${days}d_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div style={{ maxWidth:1000 }}>
       {/* Header */}
@@ -87,6 +153,17 @@ export default function OperatorReportPage() {
               fontWeight: days===d ? 700 : 400,
             }}>{d}d</button>
           ))}
+          {/* ← download button added HERE, inside existing div */}
+          {operators.length > 0 && (
+            <button onClick={downloadCSV} style={{
+              padding:"5px 14px", borderRadius:6, fontSize:12, cursor:"pointer", 
+              fontFamily:"inherit", fontWeight:600,
+              background:"var(--accent-dk)", color:"var(--accent-text)", 
+              border:"1px solid var(--accent-dk)",
+            }}>
+              ⬇ Download CSV
+            </button>
+          )}
         </div>
       </div>
 
