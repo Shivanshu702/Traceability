@@ -898,9 +898,15 @@ function PipelineTab() {
   async function handleReset() {
     if(!confirm("Reset pipeline to defaults?"))return;
     setSaving(true);
-    const res = await resetPipelineConfig();
-    setConfig(res.config); setSaving(false);
-    setMsg({type:"ok",text:"✅ Reset to defaults."});
+    try {
+      const res = await resetPipelineConfig();
+      setConfig(res.config);
+      setMsg({type:"ok",text:"✅ Reset to defaults."});
+    } catch {
+      setMsg({type:"err",text:"❌ Reset failed."});
+    } finally {
+      setSaving(false);
+    }
   }
  
   if (loading) return <Spin />;
@@ -1052,7 +1058,10 @@ function AuditTab() {
     // variable is an anti-pattern; the default is always the initial render value.
     const effectiveLim = lim !== undefined ? lim : limit;
     setLoading(true);
-    getAuditLog(effectiveLim).then(d=>{ setLogs(Array.isArray(d)?d:[]); setLoading(false); });
+    getAuditLog(effectiveLim)
+      .then(d=>{ setLogs(Array.isArray(d)?d:[]); })
+      .catch(() => {})
+      .finally(()=> setLoading(false));
   }
   useEffect(()=>{ loadLogs(limit); },[]);
  

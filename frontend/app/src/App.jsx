@@ -104,7 +104,6 @@ function AppShell() {
       { to: "/admin",           label: `⚙ ${t("admin")}`        },
       { to: "/operator-report", label: `📊 ${t("operatorReport")}`     },
       { to: "/smt",             label: SMT_NAV.label },
-      { to: "/integrations", label: "🔌 Integrations" },
       // /pipeline-editor intentionally removed — accessible via Admin → Pipeline Config
     ] : []),
   ];
@@ -249,9 +248,6 @@ function AppShell() {
           {/* ── SMT Analytics route — added ──────────────────────────────── */}
           <Route path="/smt" element={
             <RequireAdmin user={user}><SMT_ROUTE.component /></RequireAdmin>
-          } />
-          <Route path="/integrations" element={
-            <RequireAdmin user={user}><IntegrationsTab /></RequireAdmin>
           } />
 
           <Route path="*" element={<Navigate to="/" replace />} />
