@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, cast, Date, distinct, func
 from sqlalchemy.orm import Session
 
-from core.auth import require_role             # reuse existing auth guard
+from core.auth import require_admin             # reuse existing auth guard
 from database import get_db
 from models.integration import SmtEvent, UnitTestResult
 from schemas.integration import (
@@ -45,7 +45,7 @@ def _today_utc() -> datetime:
 @router.get(
     "/api/analytics/smt-summary",
     response_model=SmtSummary,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 def smt_summary(db: Session = Depends(get_db)):
     today = _today_utc()
@@ -102,7 +102,7 @@ def smt_summary(db: Session = Depends(get_db)):
 
 @router.get(
     "/api/analytics/yield",
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 def yield_trend(
     days: int = Query(default=14, ge=1, le=90),
@@ -146,7 +146,7 @@ def yield_trend(
 @router.get(
     "/api/analytics/cycle-time",
     response_model=CycleTimeStats,
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 def cycle_time_stats(db: Session = Depends(get_db)):
     """
@@ -185,7 +185,7 @@ def cycle_time_stats(db: Session = Depends(get_db)):
 
 @router.get(
     "/api/analytics/unit-results",
-    dependencies=[Depends(require_role(["admin"]))],
+    dependencies=[Depends(require_admin)],
 )
 def unit_results(
     limit:   int           = Query(default=200, ge=1, le=2000),
