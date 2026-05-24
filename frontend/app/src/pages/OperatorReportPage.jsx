@@ -144,7 +144,7 @@ export default function OperatorReportPage() {
           </div>
         </div>
         <div style={{ marginLeft:"auto", display:"flex", gap:8, flexWrap:"wrap" }}>
-          {[7, 14, 30, 90].map(d => (
+          {[1, 7, 14, 30, 90].map(d => (
             <button key={d} onClick={() => handleDays(d)} style={{
               padding:"5px 14px", borderRadius:6, fontSize:12, cursor:"pointer", fontFamily:"inherit",
               background: days===d ? "var(--accent-dk)" : "var(--inp-bg)",
