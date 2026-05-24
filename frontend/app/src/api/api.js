@@ -131,7 +131,7 @@ export const getStageLoad = () => req("GET", "/stage-load");
 export const getAnalytics = () => req("GET", "/analytics");
 
 // ── Operator + weekly analytics ───────────────────────────────────────────────
-export const getOperatorStats = () => req("GET", "/analytics/operators");
+export const getOperatorStats = (days = 30) => req("GET", `/analytics/operators?days=${days}`);
 export const getWeeklyStats   = () => req("GET", "/analytics/weekly");
 
 // ── Audit log ─────────────────────────────────────────────────────────────────

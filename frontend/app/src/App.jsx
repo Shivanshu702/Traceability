@@ -1,6 +1,5 @@
 // C:\SHIVANSH\Traceability\frontend\app\src\App.jsx //
 
-import IntegrationsTab   from "./pages/IntegrationsTab";
 import { SMT_NAV, SMT_ROUTE } from "./routes/integrationRoutes";
 import { useEffect, useState } from "react";
 import {

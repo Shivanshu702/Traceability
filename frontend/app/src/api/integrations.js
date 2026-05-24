@@ -52,7 +52,19 @@ export const getUnitJourney = (params = {}) => {
     return _iapi(`/api/analytics/unit-journey${q ? "?" + q : ""}`);
 };
 
-export const downloadUnitJourney = (project = "") => {
+export async function downloadUnitJourney(project = "") {
     const q = project ? `?project=${encodeURIComponent(project)}` : "";
-    window.open(`${BASE}/api/analytics/unit-journey/export${q}`, "_blank");
-};
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${BASE}/api/analytics/unit-journey/export${q}`, {
+        credentials: "include",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `unit_journey${project ? "_" + project : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
