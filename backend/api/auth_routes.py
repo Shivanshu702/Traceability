@@ -273,6 +273,7 @@ def login(
 
     return {
         "ok":        True,
+        "token":     token,
         "role":      user.role,
         "username":  user.username,
         "tenant_id": user.tenant_id,

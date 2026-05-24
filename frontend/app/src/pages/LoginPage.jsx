@@ -46,6 +46,7 @@ export default function LoginPage({ onLogin, Controls }) {
       localStorage.setItem("username",  data.username  || username);
       localStorage.setItem("role",      data.role      || "operator");
       localStorage.setItem("tenant_id", data.tenant_id || tenantId || "default");
+      if (data.token) localStorage.setItem("token", data.token);
       onLogin({ username: data.username || username, role: data.role || "operator", tenant_id: data.tenant_id || "default" });
     } catch { setError(t("cannotReachServer")); }
     finally   { setLoading(false); }

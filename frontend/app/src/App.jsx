@@ -70,6 +70,9 @@ function AppShell() {
     localStorage.setItem("username",  userData.username);
     localStorage.setItem("role",      userData.role);
     localStorage.setItem("tenant_id", userData.tenant_id || "default");
+    if (userData.token) {
+      localStorage.setItem("token", userData.token);
+    }
     setUser(userData);
     const from = location.state?.from?.pathname || "/";
     navigate(from, { replace: true });
@@ -83,6 +86,7 @@ function AppShell() {
     localStorage.removeItem("username");
     localStorage.removeItem("role");
     localStorage.removeItem("tenant_id");
+    localStorage.removeItem("token");
     setUser(null);
     navigate("/login", { replace: true });
   }

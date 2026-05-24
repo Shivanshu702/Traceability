@@ -4,17 +4,21 @@ const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
 
 async function req(method, path, body) {
+  const token = localStorage.getItem("token");
   const opts = {
     method,
     credentials: "include",                          // send the HttpOnly cookie cross-origin
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+     },
   };
   if (body !== undefined) opts.body = JSON.stringify(body);
 
   const res = await fetch(`${BASE}${path}`, opts);
 
   if (res.status === 401) {
-    ["role", "username", "tenant_id"].forEach(k => localStorage.removeItem(k));
+    ["role", "username", "tenant_id", "token"].forEach(k => localStorage.removeItem(k));
     if (!window.location.pathname.startsWith("/login")) {
       window.location.href = "/login";
     }
@@ -41,7 +45,7 @@ export async function logoutUser() {
     method:      "POST",
     credentials: "include",                          // backend clears the cookie
   });
-  ["role", "username", "tenant_id"].forEach(k => localStorage.removeItem(k));
+  ["role", "username", "tenant_id", "token"].forEach(k => localStorage.removeItem(k));
 }
 
 // Registration — Step 1: send OTP
@@ -161,7 +165,11 @@ export function downloadScanLogCSV() { return _dl("/export/scan-log", "scan_log.
 export function downloadReportXLSX() { return _dl("/export/report",   "production_report.xlsx"); }
 
 async function _dl(path, filename) {
-  const res = await fetch(`${BASE}${path}`, { credentials: "include" });
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${BASE}${path}`, { 
+    credentials: "include",
+    headers: token ? { "Authorization": `Bearer ${token}` } : {},
+  });
   if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
   const blob = await res.blob();
   const url  = URL.createObjectURL(blob);

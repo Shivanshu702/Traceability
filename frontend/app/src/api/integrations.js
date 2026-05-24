@@ -3,9 +3,12 @@
 const BASE = "https://traceability-backend-37dm.onrender.com";
 
 async function _iapi(path, opts = {}) {
+  const token = localStorage.getItem("token");
   const res = await fetch(BASE + path, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    headers: { "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      ...(opts.headers || {}) },
     ...opts,
   });
   if (res.status === 401) throw new Error("SESSION_EXPIRED");
