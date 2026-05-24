@@ -104,14 +104,20 @@ export default function IntegrationsTab() {
 
   async function testCogiscan() {
     setCogTesting(true); setCogStatus(null);
-    try { await testCogiscanConnection(); setCogStatus("ok"); }
+    try { 
+      const res = await testCogiscanConnection();
+      setCogStatus(res.status === "ok" ? "ok" : "err");
+    }
     catch  { setCogStatus("err"); }
     finally { setCogTesting(false); }
   }
 
   async function testWats() {
     setWatsTesting(true); setWatsStatus(null);
-    try { await testWatsConnection(); setWatsStatus("ok"); }
+    try { 
+      const res = await testWatsConnection();
+      setWatsStatus(res.status === "ok" ? "ok" : "err");
+    }
     catch  { setWatsStatus("err"); }
     finally { setWatsTesting(false); }
   }
