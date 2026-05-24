@@ -173,7 +173,7 @@ def _cogiscan_poll_task():
     db = SessionLocal()
     try:
         cfg = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
-        if cfg and cfg.cogiscan_enabled and cfg.cogiscan_poll_sec > 0:
+        if cfg and cfg.cogiscan_enabled and cfg.cogiscan_poll_sec > 0 and cfg.cogiscan_url:
             # Respect the configured interval — scheduler ticks every 30s
             # but only actually syncs once enough time has passed
             if cfg.cogiscan_last_sync:
