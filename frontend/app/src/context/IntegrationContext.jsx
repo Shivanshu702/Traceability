@@ -13,7 +13,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { getIntegrationsConfig } from "../api/integrations";
 
 // ── Default shape (safe fallback before first load) ────────────────────────────
-const DEFAULT = {
+export const DEFAULT = {
   cogiscan_enabled:    false,
   cogiscan_url:        "",
   cogiscan_api_key:    "",
@@ -41,6 +41,8 @@ export function IntegrationProvider({ children }) {
   const [loaded, setLoaded] = useState(false);
 
   const refreshConfig = useCallback(async () => {
+    const username = localStorage.getItem("username");
+    if (!username) return;
     try {
       const d = await getIntegrationsConfig();
       setConfig({ ...DEFAULT, ...d });

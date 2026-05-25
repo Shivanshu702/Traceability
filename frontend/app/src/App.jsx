@@ -1,5 +1,6 @@
 // C:\SHIVANSH\Traceability\frontend\app\src\App.jsx //
 
+import { useIntegrationContext, DEFAULT  } from "./context/IntegrationContext";
 import { SMT_NAV, SMT_ROUTE } from "./routes/integrationRoutes";
 import { useEffect, useState } from "react";
 import {
@@ -47,6 +48,7 @@ function RequireAdmin({ user, children }) {
 
 // ── Inner app ──────────────────────────────────────────────────────────────────
 function AppShell() {
+  const { refreshConfig, setConfig } = useIntegrationContext();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -72,6 +74,7 @@ function AppShell() {
     if (userData.token) {
       localStorage.setItem("token", userData.token);
     }
+    refreshConfig();
     setUser(userData);
     const from = location.state?.from?.pathname || "/";
     navigate(from, { replace: true });
@@ -86,6 +89,7 @@ function AppShell() {
     localStorage.removeItem("role");
     localStorage.removeItem("tenant_id");
     localStorage.removeItem("token");
+    setConfig(DEFAULT); 
     setUser(null);
     navigate("/login", { replace: true });
   }
