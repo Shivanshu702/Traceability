@@ -11,6 +11,7 @@ import {
   syncWatsNow,
   syncCogiscanNow,
   getCogiscanWebhookUrl,
+  rotateWebhookSecret,
 } from "../api/integrations";
 
 // ── Shared mini-components ────────────────────────────────────────────────────
@@ -83,6 +84,8 @@ export default function IntegrationsTab() {
   const [watsStatus,  setWatsStatus]  = useState(null);
   const [cogTesting,  setCogTesting]  = useState(false);
   const [watsTesting, setWatsTesting] = useState(false);
+  const [newSecret,   setNewSecret]   = useState(null);     // shown ONCE after generating
+  const tenantId = localStorage.getItem("tenant_id") || "default";
   const [cogSyncing,  setCogSyncing]  = useState(false);
   const [watsSyncing, setWatsSyncing] = useState(false);
 
@@ -170,7 +173,7 @@ export default function IntegrationsTab() {
 
             {config.smt_auto_create && (
               <div className="note-box" style={{ marginBottom: 12 }}>
-                ℹ️ The webhook must send the header <code>X-Webhook-Secret</code> (server variable <code>COGISCAN_WEBHOOK_SECRET</code>). Polling works without it.
+                ℹ️ Push mode needs the webhook secret below (header <code>X-Webhook-Secret</code>). Polling works without it.
               </div>
             )}
 
@@ -200,16 +203,40 @@ export default function IntegrationsTab() {
               <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, marginBottom: 6 }}>Webhook URL (push mode)</div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <code style={{ fontSize: 11, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", flex: 1, color: "var(--note-text)", fontFamily: "var(--font-mono)" }}>
-                  {getCogiscanWebhookUrl()}
+                  {getCogiscanWebhookUrl(tenantId)}
                 </code>
                 <button className="btn" style={{ fontSize: 11, padding: "6px 10px", flexShrink: 0 }}
-                  onClick={() => navigator.clipboard?.writeText(getCogiscanWebhookUrl())}>
+                  onClick={() => navigator.clipboard?.writeText(getCogiscanWebhookUrl(tenantId))}>
                   Copy
                 </button>
               </div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 5 }}>
-                Configure this URL in Cogiscan's event forwarding and send the header <code>X-Webhook-Secret</code> with the value of the server's <code>COGISCAN_WEBHOOK_SECRET</code>.
+                Configure this URL in Cogiscan's event forwarding and send the header <code>X-Webhook-Secret</code> with your organisation's webhook secret.
               </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                <button className="btn" style={{ fontSize: 11, padding: "6px 10px" }}
+                  onClick={async () => {
+                    if (config.webhook_secret_set && !window.confirm("Generate a new secret? The current one stops working immediately.")) return;
+                    try { const r = await rotateWebhookSecret(); setNewSecret(r.secret); setConfig(c => ({ ...c, webhook_secret_set: true })); }
+                    catch (e) { setErr(e.message || "Could not generate secret"); }
+                  }}>
+                  {config.webhook_secret_set ? "🔄 Rotate webhook secret" : "🔑 Generate webhook secret"}
+                </button>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                  {config.webhook_secret_set ? "A secret is set (it cannot be shown again)." : "No secret yet — the webhook rejects all requests until you generate one."}
+                </span>
+              </div>
+              {newSecret && (
+                <div className="note-box" style={{ marginTop: 8 }}>
+                  <strong>Copy this secret now — it will not be shown again:</strong>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <code style={{ flex: 1, wordBreak: "break-all", fontFamily: "var(--font-mono)", fontSize: 11 }}>{newSecret}</code>
+                    <button className="btn" style={{ fontSize: 11, padding: "4px 10px" }}
+                      onClick={() => navigator.clipboard?.writeText(newSecret)}>Copy</button>
+                    <button className="btn" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => setNewSecret(null)}>Done</button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {config.cogiscan_last_sync && (

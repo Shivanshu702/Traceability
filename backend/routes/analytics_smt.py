@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, cast, Date, distinct, func
 from sqlalchemy.orm import Session
 
-from core.auth import require_admin             # reuse existing auth guard
+from core.auth import admin_tenant              # admin guard that yields the tenant id
 from database import get_db
 from models.integration import SmtEvent, UnitTestResult
 import csv, io
@@ -26,6 +26,20 @@ from schemas.integration import (
 router = APIRouter(tags=["analytics-smt"])
 
 
+def _runs_by_serial(db: Session, tid: str, serials: List[str]) -> dict:
+    """All test runs for the given serials in one query (instead of one per unit)."""
+    out: dict = {}
+    if not serials:
+        return out
+    rows = db.query(UnitTestResult).filter(
+        UnitTestResult.tenant_id == tid,
+        UnitTestResult.unit_serial.in_(serials),
+    ).order_by(UnitTestResult.test_started_at.asc()).all()
+    for r in rows:
+        out.setdefault(r.unit_serial, []).append(r)
+    return out
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _today_utc() -> datetime:
@@ -38,35 +52,40 @@ def _today_utc() -> datetime:
 @router.get(
     "/api/analytics/smt-summary",
     response_model=SmtSummary,
-    dependencies=[Depends(require_admin)],
 )
-def smt_summary(db: Session = Depends(get_db)):
+def smt_summary(tid: str = Depends(admin_tenant), db: Session = Depends(get_db)):
     today = _today_utc()
 
     # Units and panels today
     units_today = db.query(func.count(UnitTestResult.id)).filter(
+        UnitTestResult.tenant_id == tid,
         UnitTestResult.test_started_at >= today
     ).scalar() or 0
 
     panels_today = db.query(func.count(SmtEvent.id)).filter(
+        SmtEvent.tenant_id == tid,
         SmtEvent.smt_exit_at >= today
     ).scalar() or 0
 
     # First pass yield — units with no retests
-    fpy_q     = db.query(UnitTestResult).filter(UnitTestResult.run_number == 1)
+    fpy_q     = db.query(UnitTestResult).filter(
+        UnitTestResult.tenant_id == tid, UnitTestResult.run_number == 1)
     fpy_total = fpy_q.count()
     fpy_pass  = fpy_q.filter(UnitTestResult.status == "PASS").count()
     fpy_pct   = round((fpy_pass / fpy_total) * 100, 1) if fpy_total > 0 else None
 
     # Overall yield (all units ever tested)
-    all_total  = db.query(func.count(UnitTestResult.id)).scalar() or 0
+    all_total  = db.query(func.count(UnitTestResult.id)).filter(
+        UnitTestResult.tenant_id == tid).scalar() or 0
     all_passed = db.query(func.count(UnitTestResult.id)).filter(
+        UnitTestResult.tenant_id == tid,
         UnitTestResult.status == "PASS"
     ).scalar() or 0
     overall_yield_pct = round((all_passed / all_total) * 100, 1) if all_total > 0 else None
 
     # Failures and distinct codes today
     failures_today = db.query(func.count(UnitTestResult.id)).filter(
+        UnitTestResult.tenant_id == tid,
         UnitTestResult.test_started_at >= today,
         UnitTestResult.status == "FAIL",
     ).scalar() or 0
@@ -74,6 +93,7 @@ def smt_summary(db: Session = Depends(get_db)):
     failure_codes_today = db.query(
         func.count(distinct(UnitTestResult.failure_code))
     ).filter(
+        UnitTestResult.tenant_id == tid,
         UnitTestResult.test_started_at >= today,
         UnitTestResult.status == "FAIL",
         UnitTestResult.failure_code.isnot(None),
@@ -95,10 +115,10 @@ def smt_summary(db: Session = Depends(get_db)):
 
 @router.get(
     "/api/analytics/yield",
-    dependencies=[Depends(require_admin)],
 )
 def yield_trend(
     days: int = Query(default=14, ge=1, le=90),
+    tid: str = Depends(admin_tenant),
     db: Session = Depends(get_db),
 ):
     """
@@ -114,6 +134,7 @@ def yield_trend(
             case((UnitTestResult.status == "PASS", 1), else_=0)
         ).label("passed"),
     ).filter(
+        UnitTestResult.tenant_id == tid,
         UnitTestResult.test_started_at >= cutoff,
         UnitTestResult.run_number == 1,    # first-pass only
     ).group_by(
@@ -139,9 +160,8 @@ def yield_trend(
 @router.get(
     "/api/analytics/cycle-time",
     response_model=CycleTimeStats,
-    dependencies=[Depends(require_admin)],
 )
-def cycle_time_stats(db: Session = Depends(get_db)):
+def cycle_time_stats(tid: str = Depends(admin_tenant), db: Session = Depends(get_db)):
     """
     Calculates:
       - avg/min/max time from SMT exit → test start (seconds)
@@ -153,6 +173,7 @@ def cycle_time_stats(db: Session = Depends(get_db)):
         UnitTestResult.test_started_at,
         UnitTestResult.test_duration_sec,
     ).filter(
+        UnitTestResult.tenant_id == tid,
         UnitTestResult.smt_exit_at.isnot(None),
         UnitTestResult.test_started_at.isnot(None),
     ).all()
@@ -178,20 +199,20 @@ def cycle_time_stats(db: Session = Depends(get_db)):
 
 @router.get(
     "/api/analytics/unit-results",
-    dependencies=[Depends(require_admin)],
 )
 def unit_results(
     limit:   int           = Query(default=200, ge=1, le=2000),
     offset:  int           = Query(default=0,   ge=0),
     status:  Optional[str] = Query(default=None),
     tray_id: Optional[str] = Query(default=None),
+    tid: str = Depends(admin_tenant),
     db: Session = Depends(get_db),
 ):
     """
     Paginated unit test results with optional status / tray_id filter.
     Returns list of UnitTestResultOut with computed smt_to_test_sec.
     """
-    q = db.query(UnitTestResult)
+    q = db.query(UnitTestResult).filter(UnitTestResult.tenant_id == tid)
 
     if status:
         q = q.filter(UnitTestResult.status == status.upper())
@@ -226,25 +247,26 @@ def unit_results(
 
     return out
 
-@router.get("/api/analytics/unit-journey", dependencies=[Depends(require_admin)])
+@router.get("/api/analytics/unit-journey")
 def unit_journey(
     limit:   int           = Query(default=200, ge=1, le=2000),
     offset:  int           = Query(default=0,   ge=0),
     status:  Optional[str] = Query(default=None),
     project: Optional[str] = Query(default=None),
+    tid: str = Depends(admin_tenant),
     db: Session = Depends(get_db),
 ):
     """Full unit journey: SMT entry → exit → all test runs → final pass."""
-    q = db.query(SmtUnitEvent)
+    q = db.query(SmtUnitEvent).filter(SmtUnitEvent.tenant_id == tid)
     if project:
         q = q.filter(SmtUnitEvent.project_id == project)
     units = q.order_by(SmtUnitEvent.smt_exit_at.desc()).offset(offset).limit(limit).all()
 
+    runs_by_serial = _runs_by_serial(db, tid, [u.unit_serial for u in units])
+
     result = []
     for unit in units:
-        runs = db.query(UnitTestResult).filter(
-            UnitTestResult.unit_serial == unit.unit_serial
-        ).order_by(UnitTestResult.test_started_at.asc()).all()
+        runs = runs_by_serial.get(unit.unit_serial, [])
 
         first_run  = runs[0] if runs else None
         final_pass = next((r for r in runs if r.status == "PASS"), None)
@@ -290,13 +312,14 @@ def unit_journey(
     return result
 
 
-@router.get("/api/analytics/unit-journey/export", dependencies=[Depends(require_admin)])
+@router.get("/api/analytics/unit-journey/export")
 def unit_journey_export(
     project: Optional[str] = Query(default=None),
+    tid: str = Depends(admin_tenant),
     db: Session = Depends(get_db),
 ):
     """Download unit journey as CSV."""
-    q = db.query(SmtUnitEvent)
+    q = db.query(SmtUnitEvent).filter(SmtUnitEvent.tenant_id == tid)
     if project:
         q = q.filter(SmtUnitEvent.project_id == project)
     units = q.order_by(SmtUnitEvent.smt_exit_at.desc()).all()
@@ -312,10 +335,10 @@ def unit_journey_export(
         "Failure Codes",
     ])
 
+    runs_by_serial = _runs_by_serial(db, tid, [u.unit_serial for u in units])
+
     for unit in units:
-        runs       = db.query(UnitTestResult).filter(
-            UnitTestResult.unit_serial == unit.unit_serial
-        ).order_by(UnitTestResult.test_started_at.asc()).all()
+        runs       = runs_by_serial.get(unit.unit_serial, [])
         first_run  = runs[0] if runs else None
         final_pass = next((r for r in runs if r.status == "PASS"), None)
         latest     = runs[-1] if runs else None

@@ -21,6 +21,7 @@ def advance_tray(
     operator: str = "SYSTEM",
     next_stage_override: str = None,
     config: dict = None,
+    performed_by: str = None,
 ) -> dict:
 
     if config is None:
@@ -54,7 +55,7 @@ def advance_tray(
 
     # ── Intercept split trigger ────────────────────────────────────────────────
     if split_stage and tray.stage == split_stage:
-        return _split_tray(db, tray, operator, fifo_vio, fifo["older_trays"], config)
+        return _split_tray(db, tray, operator, fifo_vio, fifo["older_trays"], config, performed_by)
 
     # ── Branch stage — operator must supply a choice ───────────────────────────
     now = datetime.now(timezone.utc)
@@ -84,7 +85,7 @@ def advance_tray(
 
     log_scan(
         db, tray.id, from_stage, next_stage_id, operator,
-        fifo_vio, scan_note, tray.tenant_id,
+        fifo_vio, scan_note, tray.tenant_id, performed_by,
     )
 
     nd = get_stage_def(next_stage_id, config, project_id)
@@ -105,7 +106,7 @@ def advance_tray(
 
 def _split_tray(
     db, tray: Tray, operator: str,
-    fifo_vio: bool, older_trays: list, config: dict,
+    fifo_vio: bool, older_trays: list, config: dict, performed_by: str = None,
 ) -> dict:
     """Mark parent as SPLIT and create child trays A and B."""
     split_cfg    = config.get("split", {})
@@ -141,12 +142,12 @@ def _split_tray(
         db.add(child)
         log_scan(
             db, child.id, "CREATED", resume_stage, operator,
-            False, f"Split from {tray.id} — Part {part}", tray.tenant_id,
+            False, f"Split from {tray.id} — Part {part}", tray.tenant_id, performed_by,
         )
 
     log_scan(
         db, tray.id, from_stage, SPLIT_MARKER, operator, fifo_vio,
-        f"Split into {tray.id}-A and {tray.id}-B", tray.tenant_id,
+        f"Split into {tray.id}-A and {tray.id}-B", tray.tenant_id, performed_by,
     )
 
     nd = get_stage_def(resume_stage, config)

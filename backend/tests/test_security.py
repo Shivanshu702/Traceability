@@ -75,8 +75,12 @@ def test_secrets_not_returned(client):
 
 
 def test_webhook_requires_secret(client):
+    client.post("/register", json={"username": "admin", "password": "secret1"})
+    h = _login(client, "admin", "secret1")
+    client.get("/api/integrations/config", headers=h)          # creates the tenant's config row
     assert client.post("/api/webhooks/cogiscan", json={}).status_code == 401
     assert client.post("/api/webhooks/cogiscan", json={}, headers={"X-Webhook-Secret": "bad"}).status_code == 401
+    # legacy global secret still works for the "default" tenant only
     assert client.post("/api/webhooks/cogiscan", json={}, headers={"X-Webhook-Secret": "s3cret"}).status_code == 204
 
 

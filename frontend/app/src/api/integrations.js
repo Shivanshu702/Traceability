@@ -50,7 +50,9 @@ export const getUnitTestResults = (params = {}) => {
 export const getSmtDashboardSummary = () => _iapi("/api/analytics/smt-summary");
 
 // ── Webhook registration (optional) ──────────────────────────────────────────
-export const getCogiscanWebhookUrl = () => `${BASE}/api/webhooks/cogiscan`;
+export const getCogiscanWebhookUrl = (tenantId = "default") =>
+  `${BASE}/api/webhooks/cogiscan/${encodeURIComponent(tenantId)}`;
+export const rotateWebhookSecret = () => _iapi("/api/integrations/webhook-secret", { method: "POST" });
 
 export const getUnitJourney = (params = {}) => {
     const q = new URLSearchParams(params).toString();

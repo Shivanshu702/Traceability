@@ -159,6 +159,9 @@ export default function HistoryPage() {
                           {/* Operator + timestamp */}
                           <div style={{ fontSize:12, color:"var(--muted)" }}>
                             <span style={{ color:"#85B7EB" }}>{h.operator}</span>
+                            {h.performed_by && h.performed_by !== h.operator && (
+                              <span style={{ color:"var(--muted)", fontSize:11 }} title="Logged-in account that recorded this scan"> · login: {h.performed_by}</span>
+                            )}
                             {" · "}
                             {fmtDate(h.timestamp)}
                           </div>
@@ -216,7 +219,12 @@ export default function HistoryPage() {
                             {h.stage}
                           </span>
                         </td>
-                        <td style={{ color:"#85B7EB", fontSize:13 }}>{h.operator}</td>
+                        <td style={{ color:"#85B7EB", fontSize:13 }}>
+                          {h.operator}
+                          {h.performed_by && h.performed_by !== h.operator && (
+                            <div style={{ color:"var(--muted)", fontSize:10 }} title="Logged-in account that recorded this scan">login: {h.performed_by}</div>
+                          )}
+                        </td>
                         <td>
                           {h.durationSec != null ? (
                             <span style={{ color: h.durationSec > 7200 ? "#E24B4A" : h.durationSec > 3600 ? "#EF9F27" : "#5DCAA5", fontWeight:600, fontSize:12 }}>

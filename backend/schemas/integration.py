@@ -48,6 +48,8 @@ class IntegrationConfigOut(IntegrationConfigIn):
     wats_api_key:         str  = ""
     cogiscan_api_key_set: bool = False
     wats_api_key_set:     bool = False
+    webhook_secret_set:   bool = False
+    webhook_path:         str  = ""
 
     cogiscan_last_sync: Optional[datetime] = None
     wats_last_sync:     Optional[datetime] = None
@@ -58,6 +60,8 @@ class IntegrationConfigOut(IntegrationConfigIn):
         out = cls.model_validate(cfg)
         out.cogiscan_api_key_set = bool(cfg.cogiscan_api_key)
         out.wats_api_key_set     = bool(cfg.wats_api_key)
+        out.webhook_secret_set   = bool(cfg.webhook_secret_hash)
+        out.webhook_path         = f"/api/webhooks/cogiscan/{cfg.tenant_id}"
         out.cogiscan_api_key = ""
         out.wats_api_key     = ""
         return out

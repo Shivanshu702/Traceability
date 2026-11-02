@@ -5,20 +5,29 @@ from sqlalchemy import func, case, and_, distinct
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Tray, AuditLog, ScanEvent
+from core.permissions import require_feature
 from core.auth import get_current_user, require_admin, tenant
 from core.cache import stats_cache, stage_load_cache
 from services.analytics_service import detect_bottlenecks, stage_load, get_analytics
 from datetime import date, datetime, timedelta
-from core.timeutil import utc_today_start # type: ignore
+from core.timeutil import utc_today_start
 from typing import Optional
 
 router = APIRouter(tags=["analytics"])
 
 
+def _stuck_count(db: Session, tid: str, project: Optional[str]) -> int:
+    items = detect_bottlenecks(db, tid)
+    if not project or not items:
+        return len(items)
+    ids = {r[0] for r in db.query(Tray.id).filter(Tray.tenant_id == tid, Tray.project == project).all()}
+    return sum(1 for i in items if i["tray_id"] in ids)
+
+
 @router.get("/stats")
 def get_stats(
     project: Optional[str] = Query(None),
-    user:    dict          = Depends(get_current_user),
+    user:    dict          = Depends(require_feature("dashboard")),
     db:      Session       = Depends(get_db),
 ):
     tid       = tenant(user)
@@ -59,7 +68,15 @@ def get_stats(
     stage_counts = {r.stage: r.cnt   for r in stage_rows}
     stage_units  = {r.stage: r.units for r in stage_rows}
 
+    scan_q = db.query(func.count(ScanEvent.id)).filter(ScanEvent.tenant_id == tid)
+    if project:
+        scan_q = scan_q.join(
+            Tray, (Tray.id == ScanEvent.tray_id) & (Tray.tenant_id == ScanEvent.tenant_id)
+        ).filter(Tray.project == project)
+    total_scans = int(scan_q.scalar() or 0)
+
     result = {
+        "total_scans":           total_scans,
         "total_active":          int(row.total_active          or 0),
         "total_complete":        int(row.total_complete         or 0),
         "total_active_units":    int(row.total_active_units     or 0),
@@ -67,7 +84,7 @@ def get_stats(
         "fifo_violated":         int(row.fifo_violated          or 0),
         "completed_today":       int(row.completed_today        or 0),
         "completed_today_units": int(row.completed_today_units  or 0),
-        "stuck_count":           len(detect_bottlenecks(db, tid)),
+        "stuck_count":           _stuck_count(db, tid, project),
         "stage_counts":          stage_counts,
         "stage_units":           stage_units,
     }
@@ -77,7 +94,7 @@ def get_stats(
 
 @router.get("/alerts")
 def get_alerts(
-    user: dict    = Depends(get_current_user),
+    user: dict    = Depends(require_feature("alerts")),
     db:   Session = Depends(get_db),
 ):
     tid   = tenant(user)
@@ -87,7 +104,7 @@ def get_alerts(
 
 @router.get("/stage-load")
 def get_stage_load(
-    user: dict    = Depends(get_current_user),
+    user: dict    = Depends(require_feature("dashboard")),
     db:   Session = Depends(get_db),
 ):
     tid       = tenant(user)
@@ -102,7 +119,7 @@ def get_stage_load(
 
 @router.get("/analytics")
 def analytics(
-    user: dict    = Depends(require_admin),
+    user: dict    = Depends(require_feature("alerts")),
     db:   Session = Depends(get_db),
 ):
     return get_analytics(db, tenant(user))
@@ -111,7 +128,7 @@ def analytics(
 @router.get("/analytics/operators")
 def operator_stats(
     days: int  = Query(default=30, ge=1, le=365),
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_feature("alerts")),
     db:   Session = Depends(get_db),
 ):
     """
@@ -187,7 +204,7 @@ def operator_stats(
 @router.get("/analytics/weekly")
 def weekly_stats(
     weeks: int = Query(default=4, ge=1, le=12),
-    user:  dict    = Depends(require_admin),
+    user:  dict    = Depends(require_feature("alerts")),
     db:    Session = Depends(get_db),
 ):
     """

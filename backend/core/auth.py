@@ -124,3 +124,8 @@ def tenant(user: dict) -> str:
     return user.get("tenant_id", "default")
 
 
+
+
+def admin_tenant(user: dict = Depends(require_admin)) -> str:
+    """Dependency for admin routes that only need the caller's tenant id."""
+    return tenant(user)

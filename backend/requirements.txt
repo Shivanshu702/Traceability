@@ -1,12 +1,13 @@
+
 # Core framework
-fastapi
+fastapi>=0.110
 uvicorn[standard]
 gunicorn
 
 # Database
-sqlalchemy
-psycopg2-binary
-alembic                     # database migrations
+sqlalchemy>=2.0,<2.2
+psycopg2-binary>=2.9
+alembic>=1.13                     # database migrations
 
 # Auth / security
 python-jose[cryptography]
@@ -14,13 +15,13 @@ bcrypt
 python-multipart
 
 # Validation (Pydantic v2 ships with FastAPI >= 0.100)
-pydantic>=2.0
+pydantic>=2.0,<3
 
 # QR codes
 qrcode[pil]
 
 # Scheduler — [sqlalchemy] extra adds the persistent job store
-apscheduler[sqlalchemy]
+apscheduler[sqlalchemy]>=3.10,<4     # 4.x is an incompatible rewrite
 
 # Email
 resend
@@ -39,3 +40,4 @@ python-dotenv
 redis>=5.0.0
 
 httpx
+

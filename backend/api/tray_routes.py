@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from core.permissions import require_feature
 from core.auth import get_current_user, require_admin, tenant
 from core.rate_limit import limiter, SCAN_LIMIT
 from database import get_db
@@ -13,7 +14,7 @@ from models import ScanEvent, Tray
 from schemas import BulkDeleteIn, BulkScanIn, ScanIn, TraysCreateIn
 from services.audit_service import log_action
 from services.email_service import send_fifo_alert
-from services.pipeline_service import get_pipeline_config, get_units_for_project_cfg, is_split_enabled
+from services.pipeline_service import get_pipeline_config, get_units_for_project_cfg, is_split_enabled, get_branch_options
 from services.qr_service import generate_qr_base64, generate_qr_bytes
 from services.tray_service import advance_tray, _tray_dict
 
@@ -29,6 +30,7 @@ def _event_dict(e: ScanEvent) -> dict:
         "from_stage": e.from_stage,
         "stage":      e.stage,
         "operator":   e.operator,
+        "performed_by": e.performed_by or e.operator,
         "fifo_flag":  e.fifo_flag,
         "note":       e.note,
         "timestamp":  e.timestamp.isoformat() if e.timestamp else None,
@@ -67,7 +69,7 @@ def get_all_trays(
 def create_trays(
     request: Request,                              # required by slowapi
     payload: TraysCreateIn,
-    user:    dict    = Depends(get_current_user),
+    user:    dict    = Depends(require_feature("create_trays")),
     db:      Session = Depends(get_db),
 ):
     from core.cache import stats_cache
@@ -122,7 +124,21 @@ def get_tray(
     ).first()
     if not tray:
         raise HTTPException(404, f"Tray not found: {tray_id}")
-    return _tray_dict(tray)
+
+    out = _tray_dict(tray)
+    # Tell the scanner UI whether this tray needs a branch decision and which options
+    # apply to ITS project (per-project overrides respected) — no hardcoded stages in the UI.
+    cfg      = get_pipeline_config(db, tid)
+    branch   = cfg.get("branch", {})
+    options  = get_branch_options(tray.project or "", cfg)
+    at_point = (
+        bool(branch.get("enabled")) and bool(options)
+        and tray.stage == branch.get("atStage")
+        and not tray.is_done and not tray.is_split_parent
+    )
+    out["is_branch_point"] = at_point
+    out["branch_options"]  = options if at_point else []
+    return out
 
 
 @router.get("/tray/{tray_id}/qr")
@@ -222,7 +238,7 @@ def bulk_delete_trays(
 def scan(
     request: Request,
     payload: ScanIn,
-    user:    dict    = Depends(get_current_user),
+    user:    dict    = Depends(require_feature("scan")),
     db:      Session = Depends(get_db),
 ):
     from core.cache import stats_cache
@@ -245,9 +261,10 @@ def scan(
 
     result = advance_tray(
         db, tray,
-        operator            = payload.operator or user["sub"],
+        operator            = (payload.operator or "").strip()[:60] or user["sub"],
         next_stage_override = payload.next_stage_override,
         config              = cfg,
+        performed_by        = user["sub"],       # from the verified token, never from the request body
     )
 
     if result.get("ok"):
@@ -270,7 +287,7 @@ def scan(
 def bulk_scan(
     request: Request,
     payload: BulkScanIn,
-    user:    dict    = Depends(get_current_user),
+    user:    dict    = Depends(require_feature("scan")),
     db:      Session = Depends(get_db),
 ):
     from core.cache import stats_cache
@@ -293,7 +310,7 @@ def bulk_scan(
             results.append({"id": tray_id, "error": "Not found"})
             continue
 
-        r = advance_tray(db, tray, user["sub"], payload.next_stage_override, cfg)
+        r = advance_tray(db, tray, user["sub"], payload.next_stage_override, cfg, performed_by=user["sub"])
         db.commit()
         results.append(r)
 
@@ -308,7 +325,7 @@ def bulk_scan(
 @router.get("/history/{tray_id}")
 def get_history(
     tray_id: str,
-    user:    dict    = Depends(get_current_user),
+    user:    dict    = Depends(require_feature("history")),
     db:      Session = Depends(get_db),
 ):
     tid    = tenant(user)
@@ -325,7 +342,7 @@ def get_history(
 def get_scan_log(
     limit:  int     = Query(default=200, ge=1, le=2000),
     offset: int     = Query(default=0,   ge=0),
-    user:   dict    = Depends(get_current_user),
+    user:   dict    = Depends(require_feature("history", "dashboard")),
     db:     Session = Depends(get_db),
 ):
     tid    = tenant(user)

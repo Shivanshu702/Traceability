@@ -1,3 +1,4 @@
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
@@ -5,7 +6,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mes.db")
+def normalize_db_url(url: str) -> str:
+    """Render/Heroku hand out `postgres://…`; SQLAlchemy 2.1 would pick the psycopg3
+    driver for a bare `postgresql://`, but this project ships psycopg2-binary."""
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg2://" + url[len("postgresql://"):]
+    return url
+
+
+DATABASE_URL = normalize_db_url(os.getenv("DATABASE_URL", "sqlite:///./mes.db"))
 
 _is_sqlite = DATABASE_URL.startswith("sqlite")
 
@@ -52,3 +63,4 @@ def get_db():
         yield db
     finally:
         db.close()
+

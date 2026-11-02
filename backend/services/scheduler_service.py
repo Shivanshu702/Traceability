@@ -168,54 +168,51 @@ def _send_daily_summary():
 # FIX: use SessionLocal (not get_db generator) for background tasks.
 
 def _cogiscan_poll_task():
-    """..."""
+    """Runs every 30 s; polls each tenant whose interval has elapsed."""
     from database import SessionLocal
     from models.integration import IntegrationConfig
     from services.cogiscan import run_sync as cogiscan_sync
     db = SessionLocal()
     try:
-        cfg = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
-        if cfg and cfg.cogiscan_enabled and cfg.cogiscan_poll_sec > 0 and cfg.cogiscan_url:
-            # Respect the configured interval — scheduler ticks every 30s
-            # but only actually syncs once enough time has passed
-            if cfg.cogiscan_last_sync:
-                elapsed = (datetime.now(timezone.utc) - as_aware(cfg.cogiscan_last_sync)).total_seconds()
-                if elapsed < cfg.cogiscan_poll_sec:
-                    logger.debug(
-                        "Cogiscan poll skipped — %ds elapsed, interval=%ds",
-                        int(elapsed), cfg.cogiscan_poll_sec,
-                    )
-                    return
-            asyncio.run(cogiscan_sync(db, cfg))
-        else:
-            logger.debug("Cogiscan poll skipped — integration disabled or poll_sec=0")
-    except Exception as exc: 
-        logger.error("Cogiscan poll error: %s", exc, exc_info=True)
+        configs = db.query(IntegrationConfig).filter(
+            IntegrationConfig.cogiscan_enabled == True      # noqa: E712
+        ).all()
+        for cfg in configs:
+            try:
+                if cfg.cogiscan_poll_sec <= 0 or not cfg.cogiscan_url:
+                    continue
+                if cfg.cogiscan_last_sync:
+                    elapsed = (datetime.now(timezone.utc) - as_aware(cfg.cogiscan_last_sync)).total_seconds()
+                    if elapsed < cfg.cogiscan_poll_sec:
+                        continue
+                asyncio.run(cogiscan_sync(db, cfg))
+            except Exception as exc:
+                db.rollback()
+                logger.error("Cogiscan poll error (tenant=%s): %s", cfg.tenant_id, exc, exc_info=True)
     finally:
         db.close()
 
 
-# ── NEW: WATS hourly sync ──────────────────────────────────────────────────────
-# FIX: same sync-wrapper pattern; missing _wats_sync import added.
+# ── WATS hourly sync ───────────────────────────────────────────────────────────
 
 def _wats_scheduled_task():
-    """
-    Runs every hour. Only executes the sync when wats_sync_mode == "scheduled".
-    The async wats.run_sync() is executed via asyncio.run().
-    """
+    """Runs every hour; syncs each tenant whose WATS mode is scheduled."""
     from database import SessionLocal
     from models.integration import IntegrationConfig
-    from services.wats import run_sync as wats_sync   # FIX: was missing
+    from services.wats import run_sync as wats_sync
 
     db = SessionLocal()
     try:
-        cfg = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
-        if cfg and cfg.wats_enabled and cfg.wats_sync_mode == "scheduled":
-            asyncio.run(wats_sync(db, cfg))
-        else:
-            logger.debug("WATS scheduled sync skipped — not enabled or mode != scheduled")
-    except Exception as exc:
-        logger.error("WATS scheduled sync error: %s", exc, exc_info=True)
+        configs = db.query(IntegrationConfig).filter(
+            IntegrationConfig.wats_enabled == True,         # noqa: E712
+            IntegrationConfig.wats_sync_mode.in_(("scheduled", "auto")),
+        ).all()
+        for cfg in configs:
+            try:
+                asyncio.run(wats_sync(db, cfg))
+            except Exception as exc:
+                db.rollback()
+                logger.error("WATS scheduled sync error (tenant=%s): %s", cfg.tenant_id, exc, exc_info=True)
     finally:
         db.close()
 

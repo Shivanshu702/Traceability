@@ -657,6 +657,7 @@ function PipelineProjectsTab({ config, setConfig }) {
   const [adding,  setAdding]  = useState(false);
   const [newProj, setNewProj] = useState({ id:"", label:"", panels:50, unitsPerPanel:9 });
   const projects = config.projects || [];
+  const stages   = config.stages   || [];
  
   function saveProject(updated) {
     const p={...updated,unitsPerTray:updated.panels*updated.unitsPerPanel};
@@ -710,7 +711,7 @@ function PipelineProjectsTab({ config, setConfig }) {
                 {editing === p.id && (
                   <tr>
                     <td colSpan={8} style={{ padding:"0 0 12px 0" }}>
-                      <ProjectInlineEditor project={p} onSave={saveProject} onCancel={()=>setEditing(null)}/>
+                      <ProjectInlineEditor project={p} stages={stages} branchOptions={config.branch?.options||[]} onSave={saveProject} onCancel={()=>setEditing(null)}/>
                     </td>
                   </tr>
                 )}
@@ -741,9 +742,22 @@ function PipelineProjectsTab({ config, setConfig }) {
   );
 }
  
-function ProjectInlineEditor({ project, onSave, onCancel }) {
+function ProjectInlineEditor({ project, stages = [], branchOptions = [], onSave, onCancel }) {
   const [form, setForm] = useState({...project});
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const customStages = (form.stageIds||[]).length > 0;
+  const chosenStages = new Set(form.stageIds||[]);
+  const toggleStage = (id) => {
+    const next = new Set(chosenStages);
+    next.has(id) ? next.delete(id) : next.add(id);
+    // keep pipeline order
+    set("stageIds", stages.map(s=>s.id).filter(x=>next.has(x)));
+  };
+  const chosenOpts = new Set((form.branchOptions||[]).map(o=>o.id));
+  const toggleOption = (o) => {
+    const next = chosenOpts.has(o.id) ? (form.branchOptions||[]).filter(x=>x.id!==o.id) : [...(form.branchOptions||[]), o];
+    set("branchOptions", next);
+  };
   return (
     <div style={{ background:"var(--bg)", border:"1px solid var(--border)", borderRadius:10, padding:16, margin:"4px 0" }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:12 }}>
@@ -767,9 +781,50 @@ function ProjectInlineEditor({ project, onSave, onCancel }) {
             <option value="inherit">Inherit global setting</option>
             <option value="enabled">Always enabled</option>
             <option value="disabled">Disabled for this project</option>
+            <option value="custom">Only some of the branch options…</option>
           </select>
         </div>
       </div>
+
+      {form.branchOverride === "custom" && (
+        <div style={{ marginBottom:16 }}>
+          <span style={PS.label}>Branch options offered for this project</span>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {branchOptions.map(o => (
+              <label key={o.id} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, cursor:"pointer",
+                border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px" }}>
+                <input type="checkbox" checked={chosenOpts.has(o.id)} onChange={()=>toggleOption(o)}/>
+                {o.icon||""} {o.label}
+              </label>
+            ))}
+          </div>
+          {chosenOpts.size === 0 && <div style={{ fontSize:11, color:"#E24B4A", marginTop:4 }}>Pick at least one option, or choose "Disabled".</div>}
+        </div>
+      )}
+
+      <div style={{ marginBottom:16 }}>
+        <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, fontWeight:600, cursor:"pointer", marginBottom:8 }}>
+          <input type="checkbox" checked={customStages}
+            onChange={e=>set("stageIds", e.target.checked ? stages.map(s=>s.id) : [])}/>
+          Use a custom stage list for this project (otherwise it follows the full pipeline)
+        </label>
+        {customStages && (
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {stages.map(s => (
+              <label key={s.id} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, cursor:"pointer",
+                border:`1px solid ${chosenStages.has(s.id) ? (s.color||"var(--border)") : "var(--border)"}`, borderRadius:8, padding:"5px 10px",
+                opacity: chosenStages.has(s.id) ? 1 : .55 }}>
+                <input type="checkbox" checked={chosenStages.has(s.id)} onChange={()=>toggleStage(s.id)}/>
+                {s.label}
+              </label>
+            ))}
+          </div>
+        )}
+        {customStages && <div style={{ fontSize:11, color:"var(--muted)", marginTop:6 }}>
+          Unchecked stages are skipped for this project. Keep the final stage, and the split / branch stages if this project uses them.
+        </div>}
+      </div>
+
       <div style={{ display:"flex", gap:8 }}>
         <button style={PS.btnP} onClick={()=>onSave({...form,unitsPerTray:form.panels*form.unitsPerPanel})}>Save project</button>
         <button style={PS.btn} onClick={onCancel}>Cancel</button>

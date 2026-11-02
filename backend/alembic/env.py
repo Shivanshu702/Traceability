@@ -1,4 +1,5 @@
 
+
 import os
 import sys
 from logging.config import fileConfig
@@ -16,7 +17,8 @@ config       = context.config
 target_metadata = Base.metadata
 
 # Read DATABASE_URL from environment (same as the app).
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mes.db")
+from database import normalize_db_url
+DATABASE_URL = normalize_db_url(os.getenv("DATABASE_URL", "sqlite:///./mes.db"))
 
 if config.config_file_name:
     fileConfig(config.config_file_name)
@@ -60,3 +62,4 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+

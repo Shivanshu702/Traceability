@@ -1,8 +1,10 @@
 
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from database import get_db
+from core.permissions import require_feature
 from core.auth import get_current_user, require_admin, tenant
 from core.rate_limit import limiter, EXPORT_LIMIT
 from services.export_service import export_trays_csv, export_scan_log_csv, export_report_xlsx
@@ -20,7 +22,7 @@ def export_trays(
     project:    str | None = Query(None),
     start_date: str | None = Query(None),
     end_date:   str | None = Query(None),
-    user:       dict       = Depends(get_current_user),
+    user:       dict       = Depends(require_feature("export")),
     db:         Session    = Depends(get_db),
 ):
     sd         = datetime.fromisoformat(start_date) if start_date else None
@@ -39,7 +41,7 @@ def export_trays(
 def export_scan_log(
     request: Request,
     limit:   int     = Query(50_000),
-    user:    dict    = Depends(get_current_user),
+    user:    dict    = Depends(require_feature("export")),
     db:      Session = Depends(get_db),
 ):
     csv_bytes = export_scan_log_csv(db, tenant(user), limit)
@@ -55,7 +57,7 @@ def export_scan_log(
 @limiter.limit(EXPORT_LIMIT)
 def export_report(
     request: Request,
-    user:    dict    = Depends(require_admin),
+    user:    dict    = Depends(require_feature("export")),
     db:      Session = Depends(get_db),
 ):
     xlsx_bytes = export_report_xlsx(db, tenant(user))
@@ -65,3 +67,5 @@ def export_report(
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers    = {"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+

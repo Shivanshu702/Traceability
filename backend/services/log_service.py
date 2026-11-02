@@ -1,3 +1,4 @@
+
 import uuid
 from models import ScanEvent
 from datetime import datetime
@@ -12,6 +13,7 @@ def log_scan(
     fifo_flag:  bool = False,
     note:       str  = "",
     tenant_id:  str  = "default",
+    performed_by: str = "",
 ):
     event = ScanEvent(
         id         = str(uuid.uuid4()),
@@ -20,8 +22,11 @@ def log_scan(
         from_stage = from_stage,
         stage      = to_stage,
         operator   = operator,
+        performed_by = performed_by or operator,
         fifo_flag  = fifo_flag,
         note       = note,
         timestamp  = datetime.utcnow(),
     )
     db.add(event)
+
+

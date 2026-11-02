@@ -98,7 +98,7 @@ async def fetch_results(
 
 # ── Upsert helper ─────────────────────────────────────────────────────────────
 
-def _parse_wats_result(raw: Dict[str, Any], db: Session):
+def _parse_wats_result(raw: Dict[str, Any], db: Session, tenant_id: str):
     from models.integration import SmtUnitEvent
 
     serial       = raw.get("serialNumber") or raw.get("serial_number", "")
@@ -120,14 +120,16 @@ def _parse_wats_result(raw: Dict[str, Any], db: Session):
     # Get SMT exit time from unit-level event (most accurate)
     smt_exit_at = None
     unit_evt = db.query(SmtUnitEvent).filter(
-        SmtUnitEvent.unit_serial == serial
+        SmtUnitEvent.tenant_id   == tenant_id,
+        SmtUnitEvent.unit_serial == serial,
     ).order_by(SmtUnitEvent.created_at.desc()).first()
     if unit_evt:
         smt_exit_at = unit_evt.smt_exit_at
 
     # Upsert if already stored
     existing = db.query(UnitTestResult).filter(
-        UnitTestResult.wats_result_id == wats_id
+        UnitTestResult.tenant_id      == tenant_id,
+        UnitTestResult.wats_result_id == wats_id,
     ).first()
     if existing:
         existing.status            = status
@@ -143,18 +145,21 @@ def _parse_wats_result(raw: Dict[str, Any], db: Session):
 
     # Count prior runs for this serial to assign run number
     prior_runs = db.query(UnitTestResult).filter(
-        UnitTestResult.unit_serial == serial
+        UnitTestResult.tenant_id   == tenant_id,
+        UnitTestResult.unit_serial == serial,
     ).count()
     run_number = prior_runs + 1
 
     # is_final_pass: True only if this run is PASS and no prior PASS exists
     prior_pass = db.query(UnitTestResult).filter(
+        UnitTestResult.tenant_id   == tenant_id,
         UnitTestResult.unit_serial == serial,
         UnitTestResult.status      == "PASS",
     ).first()
     is_final_pass = (status == "PASS" and prior_pass is None)
 
     return True, UnitTestResult(
+        tenant_id         = tenant_id,
         unit_serial       = serial,
         tray_id           = None,
         wats_result_id    = wats_id,
@@ -197,7 +202,7 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
 
     for raw in raw_results:
         try:
-            is_new, record = _parse_wats_result(raw, db)
+            is_new, record = _parse_wats_result(raw, db, config.tenant_id)
             if is_new:
                 db.add(record)
                 db.flush()      # so the next result for the same serial sees this run

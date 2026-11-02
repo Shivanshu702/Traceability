@@ -1,6 +1,7 @@
+
 # C:\SHIVANSH\Traceability\backend\models\__init__.py
 
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, UniqueConstraint, PrimaryKeyConstraint
 from database import Base
 from datetime import datetime, timezone
 
@@ -8,7 +9,8 @@ from datetime import datetime, timezone
 class Tray(Base):
     __tablename__ = "trays"
 
-    id              = Column(String, primary_key=True, index=True)
+    # Tray ids are unique PER TENANT: two organisations may both have "TRY-001".
+    id              = Column(String, index=True, nullable=False)
     tenant_id       = Column(String, default="default", index=True, nullable=False)
     stage           = Column(String, default="CREATED", index=True)
     is_done         = Column(Boolean, default=False)
@@ -26,6 +28,8 @@ class Tray(Base):
     stage_entered_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True)
     last_stuck_alert_at = Column(DateTime, nullable=True)
 
+    __table_args__ = (PrimaryKeyConstraint("tenant_id", "id", name="pk_trays"),)
+
 
 class ScanEvent(Base):
     __tablename__ = "scan_events"
@@ -35,7 +39,8 @@ class ScanEvent(Base):
     tray_id     = Column(String, index=True)
     from_stage  = Column(String, default="")
     stage       = Column(String)
-    operator    = Column(String, default="SYSTEM")
+    operator    = Column(String, default="SYSTEM")      # name typed on the shop floor (shared terminals)
+    performed_by = Column(String, default="")           # authenticated login that made the request (server-set, unforgeable)
     fifo_flag   = Column(Boolean, default=False)
     note        = Column(Text, default="")
     timestamp   = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
@@ -134,3 +139,4 @@ class RoleConfig(Base):
     label       = Column(String, default="")
     permissions = Column(Text, default="[]")    # ← column is `permissions`, not `features`
     updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+

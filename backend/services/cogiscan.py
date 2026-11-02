@@ -99,7 +99,7 @@ async def fetch_new_panels(
 
 # ── Tray auto-creator ─────────────────────────────────────────────────────────
 
-def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any]) -> Optional[str]:
+def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any], tenant_id: str) -> Optional[str]:
     """
     Record panel + individual unit SMT events.
     No tray created — SMT and QR flows are fully separate.
@@ -112,7 +112,9 @@ def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any]) -> Optional[
     unit_count = panel.get("unit_count", 1)
     units      = panel.get("units", [])  # [{"serial": "XYZ-01", "position": "U1"}, ...]
 
-    existing = db.query(SmtEvent).filter(SmtEvent.panel_id == panel_id).first()
+    existing = db.query(SmtEvent).filter(
+        SmtEvent.tenant_id == tenant_id, SmtEvent.panel_id == panel_id
+    ).first()
     if existing and existing.processed:
         log.debug("Panel %s already processed — skipping", panel_id)
         return None
@@ -128,6 +130,7 @@ def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any]) -> Optional[
     try:
         # Panel-level record
         db.add(SmtEvent(
+            tenant_id            = tenant_id,
             panel_id             = panel_id,
             datamatrix_code      = barcode or "",
             smt_exit_at          = smt_exit_at,
@@ -143,6 +146,7 @@ def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any]) -> Optional[
             # Cogiscan sent individual unit data
             for u in units:
                 db.add(SmtUnitEvent(
+                    tenant_id    = tenant_id,
                     panel_id     = panel_id,
                     unit_serial  = u.get("serial", ""),
                     position     = u.get("position"),
@@ -155,6 +159,7 @@ def auto_create_tray_from_panel(db: Session, panel: Dict[str, Any]) -> Optional[
             for i in range(1, unit_count + 1):
                 serial = f"{barcode}-{i:02d}" if barcode else f"{panel_id}-{i:02d}"
                 db.add(SmtUnitEvent(
+                    tenant_id    = tenant_id,
                     panel_id     = panel_id,
                     unit_serial  = serial,
                     position     = f"U{i}",
@@ -196,7 +201,7 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
 
     for panel in panels:
         try:
-            tray_id = auto_create_tray_from_panel(db, panel)
+            tray_id = auto_create_tray_from_panel(db, panel, config.tenant_id)
             if tray_id:
                 panels_created += 1
             else:

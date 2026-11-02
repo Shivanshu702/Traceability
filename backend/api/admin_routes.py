@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import User, EmailSettings, RoleConfig
+from models import User, EmailSettings, RoleConfig, Tray
 from schemas import PipelineConfigIn, UserCreateIn           # HIGH-2 FIX: import UserCreateIn
 from core.auth import get_current_user, require_admin, hash_password, tenant
 from core.cache import pipeline_cache, stats_cache, stage_load_cache
@@ -40,14 +40,37 @@ def get_admin_pipeline_config(user: dict = Depends(require_admin), db: Session =
     return get_pipeline_config(db, tenant(user))
 
 
+def _orphaned_stages(db: Session, tid: str, config: dict) -> dict:
+    """Stages that active trays sit at but that the new config no longer defines."""
+    from sqlalchemy import func
+    valid = {s["id"] for s in config.get("stages", [])}
+    valid |= {o["id"] for o in (config.get("branch") or {}).get("options", [])}
+    valid |= {"CREATED", "SPLIT", "COMPLETE"}
+    rows = (
+        db.query(Tray.stage, func.count(Tray.id))
+        .filter(Tray.tenant_id == tid, Tray.is_done == False)   # noqa: E712
+        .group_by(Tray.stage).all()
+    )
+    return {stage: n for stage, n in rows if stage not in valid}
+
+
 @router.put("/pipeline-config")
 def update_pipeline_config(
     payload: PipelineConfigIn,
+    force:   bool    = False,
     user:    dict    = Depends(require_admin),
     db:      Session = Depends(get_db),
 ):
     tid         = tenant(user)
     config_dict = payload.model_dump(exclude_none=False)
+    orphans     = _orphaned_stages(db, tid, config_dict)
+    if orphans and not force:
+        detail = ", ".join(f"{s} ({n} tray{'s' if n != 1 else ''})" for s, n in sorted(orphans.items()))
+        raise HTTPException(
+            409,
+            f"Cannot remove stages that still hold active trays: {detail}. "
+            "Move or complete those trays first.",
+        )
     saved       = save_pipeline_config(db, tid, config_dict)
     pipeline_cache.delete(f"pipeline:{tid}")
     log_action(db, user["sub"], "UPDATE_PIPELINE_CONFIG", "", tid)
@@ -56,10 +79,14 @@ def update_pipeline_config(
 
 
 @router.post("/pipeline-config/reset")
-def reset_pipeline_config(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
+def reset_pipeline_config(force: bool = False, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
     # HIGH-6 FIX: single commit at the end — audit log and deletion are atomic.
     from models import PipelineConfig
     tid = tenant(user)
+    orphans = _orphaned_stages(db, tid, build_default_config())
+    if orphans and not force:
+        detail = ", ".join(f"{s} ({n})" for s, n in sorted(orphans.items()))
+        raise HTTPException(409, f"Reset would orphan active trays at: {detail}.")
     row = db.query(PipelineConfig).filter(PipelineConfig.tenant_id == tid).first()
     if row:
         db.delete(row)
@@ -170,22 +197,16 @@ def delete_user(target_username: str, user: dict = Depends(require_admin), db: S
 
 @router.get("/features")
 def get_features(user: dict = Depends(require_admin)):
-    features = [
-        {"key": "scan",         "label": "Scan trays"},
-        {"key": "create_trays", "label": "Create trays"},
-        {"key": "history",      "label": "View history"},
-        {"key": "dashboard",    "label": "Dashboard"},
-        {"key": "alerts",       "label": "Alerts dashboard"},
-        {"key": "export",       "label": "Export data"},
-    ]
-    return {"features": features}
+    from core.permissions import FEATURES
+    return {"features": FEATURES}
 
 
 @router.get("/roles")
 def list_roles(user: dict = Depends(require_admin), db: Session = Depends(get_db)):
     rows = db.query(RoleConfig).filter(RoleConfig.tenant_id == tenant(user)).all()
     # CRIT-2 FIX: model column is `permissions`, not `features`.
-    return [{"name": r.name, "permissions": _json.loads(r.permissions or "[]")} for r in rows]
+    return [{"name": r.name, "label": r.label or r.name,
+             "permissions": _json.loads(r.permissions or "[]")} for r in rows]
 
 
 @router.post("/roles")
@@ -195,10 +216,15 @@ def create_role(payload: dict, user: dict = Depends(require_admin), db: Session 
     permissions = payload.get("permissions", [])
     if not name:
         raise HTTPException(400, "name required")
+    if name.lower() == "admin":
+        raise HTTPException(400, "'admin' is a reserved role")
+    from core.permissions import ALL_KEYS
+    permissions = [p for p in permissions if p in ALL_KEYS]
     if db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == name).first():
         raise HTTPException(409, "Role already exists")
     # CRIT-2 FIX: use `permissions=` (the actual column name).
-    row = RoleConfig(tenant_id=tid, name=name, permissions=_json.dumps(permissions))
+    row = RoleConfig(tenant_id=tid, name=name, label=str(payload.get("label") or name).strip(),
+                     permissions=_json.dumps(permissions))
     db.add(row)
     log_action(db, user["sub"], "CREATE_ROLE", f"role={name}", tid)
     db.commit()
@@ -213,7 +239,10 @@ def update_role(role_name: str, payload: dict, user: dict = Depends(require_admi
         raise HTTPException(404, "Role not found")
     # CRIT-2 FIX: use `row.permissions` (the actual column name).
     if "permissions" in payload:
-        row.permissions = _json.dumps(payload["permissions"])
+        from core.permissions import ALL_KEYS
+        row.permissions = _json.dumps([p for p in payload["permissions"] if p in ALL_KEYS])
+    if "label" in payload:
+        row.label = str(payload["label"] or role_name).strip()
     log_action(db, user["sub"], "UPDATE_ROLE", f"role={role_name}", tid)
     db.commit()
     return {"ok": True}
@@ -225,6 +254,9 @@ def delete_role(role_name: str, user: dict = Depends(require_admin), db: Session
     row = db.query(RoleConfig).filter(RoleConfig.tenant_id == tid, RoleConfig.name == role_name).first()
     if not row:
         raise HTTPException(404, "Role not found")
+    in_use = db.query(User).filter(User.tenant_id == tid, User.role == role_name).count()
+    if in_use:
+        raise HTTPException(409, f"{in_use} user(s) still have the role '{role_name}'. Reassign them first.")
     db.delete(row)
     log_action(db, user["sub"], "DELETE_ROLE", f"role={role_name}", tid)
     db.commit()

@@ -1,4 +1,5 @@
 
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
@@ -23,7 +24,10 @@ def get_pipeline(
     cfg = get_pipeline_config(db, tid)
     result = {
         "stages":         cfg.get("stages", []),
-        "stage_colors":   {s["id"]: s.get("color", "#888780") for s in cfg.get("stages", [])},
+        "stage_colors":   {
+            **{s["id"]: s.get("color", "#888780") for s in cfg.get("stages", [])},
+            **{o["id"]: o.get("color", "#888780") for o in cfg.get("branch", {}).get("options", [])},
+        },
         "branch_options": cfg.get("branch", {}).get("options", []),
         "projects":       cfg.get("projects", []),
         "split":          cfg.get("split", {}),
@@ -31,3 +35,5 @@ def get_pipeline(
     }
     pipeline_cache.set(cache_key, result)
     return result
+
+

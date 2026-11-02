@@ -1,3 +1,4 @@
+
 # backend/models/integration.py
 """
 SQLAlchemy models for the SMT + WATS integration layer.
@@ -17,10 +18,14 @@ from database import Base
 
 
 class IntegrationConfig(Base):
-    """Single-row config table (id always = 1). Upserted on save."""
+    """One config row per tenant. Created lazily on first access."""
     __tablename__ = "integration_config"
 
-    id = Column(Integer, primary_key=True, default=1)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # One row per tenant (organisation).
+    tenant_id = Column(String, nullable=False, unique=True, index=True)
+    # sha256 of the webhook secret; the plaintext is shown once when generated.
+    webhook_secret_hash = Column(String, nullable=True)
 
     # ── Cogiscan ─────────────────────────────────────────────────────────────
     cogiscan_enabled    = Column(Boolean,  nullable=False, default=False)
@@ -47,6 +52,7 @@ class UnitTestResult(Base):
     __tablename__ = "unit_test_results"
 
     id               = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id        = Column(String,  nullable=False, index=True)
     unit_serial      = Column(String,  nullable=False, index=True)
     tray_id          = Column(String,  nullable=True, index=True)
     wats_result_id   = Column(String,  nullable=True)   # WATS internal ID
@@ -88,6 +94,7 @@ class SmtEvent(Base):
     __tablename__ = "smt_events"
 
     id               = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id        = Column(String,  nullable=False, index=True)
     panel_id         = Column(String,  nullable=False, index=True)
     datamatrix_code  = Column(String,  nullable=False, index=True)
     smt_exit_at      = Column(DateTime(timezone=True), nullable=True)
@@ -108,6 +115,7 @@ class SmtUnitEvent(Base):
     __tablename__ = "smt_unit_events"
 
     id           = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id        = Column(String,  nullable=False, index=True)
     panel_id     = Column(String,  nullable=False, index=True)
     unit_serial  = Column(String,  nullable=False, index=True)
     position     = Column(String,  nullable=True)
@@ -115,3 +123,4 @@ class SmtUnitEvent(Base):
     smt_entry_at = Column(DateTime(timezone=True), nullable=True)
     smt_exit_at  = Column(DateTime(timezone=True), nullable=True)
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
+

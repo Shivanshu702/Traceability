@@ -32,7 +32,7 @@ def _raw(i, serial, status, hour=9):
 def _sync(db, results):
     async def fake(**kw): return results
     wats.fetch_results = fake
-    cfg = IntegrationConfig(id=1, wats_url="http://x", wats_api_key="k")
+    cfg = IntegrationConfig(tenant_id="default", wats_url="http://x", wats_api_key="k")
     db.add(cfg); db.commit()
     return asyncio.run(wats.run_sync(db, cfg)), cfg
 

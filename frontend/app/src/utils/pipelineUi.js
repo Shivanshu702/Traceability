@@ -1,47 +1,288 @@
-// Everything the UI needs to know about stages comes from the tenant's pipeline
-// config (GET /pipeline) — never from hardcoded stage IDs.
 
-export const FALLBACK_COLOR = "#6B7E95";
+// C:\SHIVANSH\Traceability\frontend\app\src\pages\ScanPage.jsx //
 
-const SYSTEM = {
-  CREATED:  { label: "Created",  color: "#888780" },
-  COMPLETE: { label: "Complete", color: "#3B6D11" },
-  SPLIT:    { label: "Split",    color: "#FAC775" },
-};
+import { useState, useEffect } from "react";
+import { scanTray, getTray } from "../api/api";
+import QRScanner from "../components/QRScanner";
+import { useLang } from "../context/LangContext";
+import { usePipeline } from "../hooks/usePipeline";
+import { stageColor as stageColorOf, stageLabel } from "../utils/pipelineUi";
 
-/** id -> { label, color, icon?, isBranchOption? }  for stages, branch options and system stages. */
-export function buildStageMeta(pipeline) {
-  const meta = { ...SYSTEM };
-  (pipeline?.stages || []).forEach(s => {
-    meta[s.id] = { ...(meta[s.id] || {}), label: s.label || s.id, color: s.color || meta[s.id]?.color || FALLBACK_COLOR };
-  });
-  (pipeline?.branch?.options || []).forEach(o => {
-    meta[o.id] = { label: o.label || o.id, color: o.color || FALLBACK_COLOR, icon: o.icon, isBranchOption: true };
-  });
-  return meta;
-}
+export default function ScanPage() {
+  const { t } = useLang();
+  const { meta } = usePipeline();
 
-export const stageColor = (meta, id) => meta?.[id]?.color || FALLBACK_COLOR;
-export const stageLabel = (meta, id) => meta?.[id]?.label || id;
+  const [trayId,      setTrayId]      = useState("");
+  const [operator,    setOperator]    = useState(
+    () => localStorage.getItem("lastOperator") || ""
+  );
+  const [tray,        setTray]        = useState(null);
+  const [error,       setError]       = useState("");
+  const [showScanner, setShowScanner] = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [branch,      setBranch]      = useState(null);
+  const [success,     setSuccess]     = useState("");
+  const [scanNote,    setScanNote]    = useState("");
 
-/** Card theme derived from one colour (works in light and dark mode: translucent tints). */
-export function themeOf(color) {
-  const c = /^#[0-9a-fA-F]{6}$/.test(color || "") ? color : FALLBACK_COLOR;
-  return { accent: c, bg: c + "14", border: c + "40" };
-}
+  // Auto-load pending QR scan from URL redirect
+  useEffect(() => {
+    const pending = localStorage.getItem("pendingScan");
+    if (pending) {
+      localStorage.removeItem("pendingScan");
+      const id = pending.trim().toUpperCase();
+      setTrayId(id);
+      autoLoad(id);
+    }
+  }, []);
 
-/** The branch decision point and its option ids, or null when branching is off. */
-export function branchInfo(pipeline) {
-  const b = pipeline?.branch;
-  if (!b?.enabled || !b.atStage || !(b.options || []).length) return null;
-  return { atStage: b.atStage, options: b.options, optionIds: b.options.map(o => o.id) };
-}
+  useEffect(() => {
+    if (operator) localStorage.setItem("lastOperator", operator);
+  }, [operator]);
 
-/** True when reaching this stage finishes a tray (mirrors backend is_terminal_stage). */
-export function isTerminal(pipeline, id) {
-  if (id === "COMPLETE") return true;
-  const b = branchInfo(pipeline);
-  if (b && b.atStage === id) return false;
-  const s = (pipeline?.stages || []).find(x => x.id === id);
-  return !!s && !s.next;
+  async function autoLoad(id) {
+    setLoading(true); setError(""); setSuccess(""); setScanNote("");
+    try {
+      const data = await getTray(id);
+      if (data.detail || data.error) { setError(data.detail || data.error); setTray(null); }
+      else { setTray(data); setBranch(null); }
+    } catch { setError(t("cannotReachServer")); }
+    finally  { setLoading(false); }
+  }
+
+  async function loadTray() {
+    const id = trayId.trim().toUpperCase();
+    if (!id) return;
+    setLoading(true); setError(""); setSuccess(""); setScanNote("");
+    try {
+      const data = await getTray(id);
+      if (data.detail || data.error) { setError(data.detail || data.error); setTray(null); }
+      else { setTray(data); setBranch(null); }
+    } catch { setError(t("cannotReachServer")); }
+    finally  { setLoading(false); }
+  }
+
+  async function doScan(id, override) {
+    const op = operator.trim();
+    if (!op) { setError(t("enterOperator")); return; }
+    setLoading(true); setError(""); setSuccess(""); setScanNote("");
+    try {
+      const data = await scanTray(
+        (id || trayId).trim().toUpperCase(), op, override || undefined
+      );
+      if (data.error) {
+        setError(
+          data.error +
+          (data.older_trays?.length ? " → Pending: " + data.older_trays.join(", ") : "")
+        );
+        return;
+      }
+      const updatedTray = data.tray || data;
+      setTray(updatedTray);
+      setBranch(null);
+
+      // FIX Bug 9: FIFO violation is the primary message — never show both success and error
+      if (data.scan_note) setScanNote(data.scan_note);
+      if (data.fifo_vio) {
+        // Tray did move, but surface the violation clearly as the only banner
+        setError(
+          `⚠ Moved to ${data.to_label || updatedTray.stage} — FIFO violation logged. ` +
+          `Older trays were waiting: ${(data.older_trays || []).join(", ")}`
+        );
+      } else if (data.is_split) {
+        setSuccess(`✂ Tray split into ${data.child_a} and ${data.child_b}`);
+      } else {
+        setSuccess(`✅ Moved to: ${data.to_label || updatedTray.stage}`);
+      }
+    } catch { setError(t("cannotReachServer")); }
+    finally  { setLoading(false); }
+  }
+
+  async function handleQRScan(result) {
+    const extracted = extractTrayId(result.trim());
+    setTrayId(extracted);
+    setShowScanner(false);
+    await autoLoad(extracted);
+  }
+
+  function extractTrayId(raw) {
+    try {
+      const url   = new URL(raw);
+      const param = url.searchParams.get("scan");
+      if (param) return param.toUpperCase();
+    } catch {}
+    return raw.toUpperCase();
+  }
+
+  function reset() {
+    setTrayId(""); setTray(null); setError("");
+    setSuccess(""); setScanNote(""); setBranch(null);
+  }
+
+  const isBranch      = !!(tray && tray.is_branch_point);
+  const branchOptions = tray?.branch_options || [];
+  const isSplitParent = tray && tray.is_split_parent;
+  const isDone        = tray && tray.is_done;
+
+  // ── Styles (theme-aware via CSS variables) ────────────────────────────────
+  const S = {
+    container: { maxWidth: 480, margin: "0 auto", fontFamily: "'Segoe UI', sans-serif" },
+    card:      { background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: "var(--shadow)" },
+    input:     { width: "100%", padding: 12, marginBottom: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--inp-bg)", color: "var(--text)", fontSize: 14, boxSizing: "border-box", outline: "none", fontFamily: "inherit", transition: "border-color .15s" },
+    buttons:   { display: "flex", gap: 8, flexWrap: "wrap" },
+    btn:       { flex: 1, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" },
+    btnPrimary:{ flex: 1, padding: 10, borderRadius: 8, border: "none", background: "var(--accent-dk)", color: "#E6F1FB", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit" },
+    branchBtn: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: 16, borderRadius: 10, cursor: "pointer", marginBottom: 8, textAlign: "left", fontFamily: "inherit" },
+  };
+
+
+  return (
+    <div style={S.container}>
+      <h2 style={{ color: "var(--text)", marginBottom: 16, fontSize: 16, fontWeight: 700 }}>
+        📷 {t("scanTray")}
+      </h2>
+
+      {/* Operator name */}
+      <div style={S.card}>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>
+          {t("operatorName")}
+        </div>
+        <input
+          style={S.input}
+          placeholder={t("operatorName")}
+          value={operator}
+          onChange={e => setOperator(e.target.value)}
+        />
+
+        <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>
+          {t("trayId")}
+        </div>
+        <input
+          style={S.input}
+          placeholder={t("trayId")}
+          value={trayId}
+          onChange={e => setTrayId(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === "Enter" && loadTray()}
+        />
+
+        <div style={S.buttons}>
+          <button style={S.btnPrimary} onClick={loadTray} disabled={loading || !trayId.trim()}>
+            {loading ? t("loading") : t("lookupTray")}
+          </button>
+          <button style={S.btn} onClick={() => setShowScanner(v => !v)}>
+            {showScanner ? t("closeCamera") : t("openCamera")}
+          </button>
+        </div>
+      </div>
+
+      {/* QR Scanner */}
+      {showScanner && (
+        <div style={S.card}>
+          <QRScanner onScan={handleQRScan} />
+        </div>
+      )}
+
+      {/* Error */}
+      {error && <div className="err-box">{error}</div>}
+
+      {/* Success */}
+      {success && <div className="ok-box">{success}</div>}
+
+      {/* Scan note */}
+      {scanNote && <div className="note-box">{scanNote}</div>}
+
+      {/* Tray card */}
+      {tray && !loading && (
+        <div style={S.card}>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "var(--text)" }}>
+              {tray.id}
+            </span>
+
+            {tray.parent_id && <span className="tag tag-amber">Part {tray.id.endsWith("-A") ? "A" : tray.id.endsWith("-B") ? "B" : tray.id.slice(-1)}</span>}
+            {tray.project   && <span className="tag tag-blue">{tray.project}</span>}
+            {tray.shift     && <span className="tag tag-gray">{tray.shift}</span>}
+          </div>
+
+          {/* Stage */}
+          <p style={{ marginBottom: 10, color: "var(--muted)", fontSize: 13 }}>
+            {t("stage")}:{" "}
+            <span style={{ color: stageColorOf(meta, tray.stage), fontWeight: 700 }}>{stageLabel(meta, tray.stage)}</span>
+          </p>
+
+          {/* Info pills */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {tray.batch_no   && <span className="tag tag-gray">{t("batch")}: {tray.batch_no}</span>}
+            <span className="tag tag-gray">{tray.total_units} {t("units")}</span>
+            {tray.created_by && <span className="tag tag-gray">{t("createdBy")}: {tray.created_by}</span>}
+          </div>
+
+          {tray.fifo_violated && (
+            <div className="warn-box">⚠ {t("fifoViolation")}</div>
+          )}
+          {isSplitParent && (
+            <div className="warn-box">
+              ✂ {t("traySplit")} <strong>{tray.id}-A</strong> {t("and")} <strong>{tray.id}-B</strong>. {t("scanEach")}
+            </div>
+          )}
+          {isDone && (
+            <div className="ok-box">✅ {t("trayComplete")}</div>
+          )}
+
+          {/* Actions */}
+          {!isDone && !isSplitParent && (
+            <>
+              {/* Branch selection */}
+              {isBranch && (
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ color: "var(--warn-text)", fontSize: 13, marginBottom: 10 }}>
+                    ⚡ {t("selectSoldering")}
+                  </p>
+                  {branchOptions.map(b => (
+                    <button key={b.id} onClick={() => setBranch(b.id)}
+                      style={{
+                        ...S.branchBtn,
+                        border: branch === b.id ? "2px solid var(--accent)" : "1px solid var(--border)",
+                        background: branch === b.id ? "rgba(55,138,221,.08)" : "var(--surface)",
+                        color: "var(--text)",
+                      }}>
+                      <span style={{ fontSize: 22 }}>{b.icon || "➜"}</span>
+                      <span style={{ fontWeight: 700 }}>{b.label}</span>
+                    </button>
+                  ))}
+                  <button
+                    style={{
+                      ...S.btnPrimary, width: "100%", marginTop: 10,
+                      padding: 14, fontSize: 15,
+                      opacity: (!branch || loading || !operator.trim()) ? 0.5 : 1,
+                    }}
+                    onClick={() => doScan(null, branch)}
+                    disabled={!branch || loading || !operator.trim()}>
+                    {loading ? t("loading") : "✔ " + t("confirmBranch")}
+                  </button>
+                </div>
+              )}
+
+              {/* Normal scan */}
+              {!isBranch && (
+                <button
+                  style={{
+                    ...S.btnPrimary, width: "100%", marginTop: 12, padding: 14, fontSize: 15,
+                    opacity: (loading || !operator.trim()) ? 0.5 : 1,
+                  }}
+                  onClick={() => doScan()}
+                  disabled={loading || !operator.trim()}>
+                  {loading ? t("loading") : "✔ " + t("confirmScan")}
+                </button>
+              )}
+            </>
+          )}
+
+          <button style={{ ...S.btn, width: "100%", marginTop: 10 }} onClick={reset}>
+            🔄 {t("scanAnother")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -10,11 +10,14 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
+from core.permissions import permissions_for
 from core.auth import (
     COOKIE_NAME,
     OPEN_REGISTRATION,
     TOKEN_TTL,
     create_token,
+    get_current_user,
+    tenant,
     hash_password,
     verify_password,
 )
@@ -275,6 +278,7 @@ def login(
 
     return {
         "ok":        True,
+        "permissions": permissions_for(db, user.tenant_id, user.role),
         "token":     token,
         "role":      user.role,
         "username":  user.username,
@@ -387,3 +391,15 @@ def _send_reset_email(db, user, email: str, raw_token: str, tenant_id: str):
             "Failed to send password reset email to %s: %s", email, exc
         )
 
+
+
+@router.get("/me")
+def me(user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Current session: used by the UI to decide which pages/features to show."""
+    tid = tenant(user)
+    return {
+        "username":    user["sub"],
+        "role":        user["role"],
+        "tenant_id":   tid,
+        "permissions": permissions_for(db, tid, user["role"]),
+    }
