@@ -1,6 +1,7 @@
 
+
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 from models import Tray, User
 
@@ -264,3 +265,4 @@ class TestFifoExtended:
         newer = make_tray(db, "T002", stage="RACK1_TOP", stage_entered_at=datetime.utcnow())
         result = check_fifo_violation(db, newer)
         assert result["violation"] is False
+

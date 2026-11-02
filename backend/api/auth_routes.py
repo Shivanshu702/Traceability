@@ -1,6 +1,7 @@
+
 # C:\SHIVANSH\Traceability\backend\api\auth_routes.py
 
-import random, hashlib
+import hashlib
 from models import PendingRegistration
 import os
 import secrets
@@ -86,8 +87,11 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
     if existing:
         raise HTTPException(409, "User already exists in this organisation")
 
+    # SECURITY: the client-supplied role is ignored. Self-registration can only
+    # ever produce "operator" (or "admin" for the very first user of a tenant).
+    # Admins assign other roles via /admin/users.
     is_first = not db.query(User).filter(User.tenant_id == tenant_id).first()
-    role     = "admin" if is_first else (payload.role or "operator")
+    role     = "admin" if is_first else "operator"
 
     user = User(tenant_id=tenant_id, username=name, password=hash_password(pw), role=role)
     db.add(user)
@@ -110,10 +114,8 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
     email     = (payload.get("email") or "").strip()
     password  = payload.get("password") or ""
     confirm   = payload.get("confirm_password") or ""
-    tenant_id = (payload.get("tenant_id") or "default").strip().upper()
+    tenant_id = _validate_tenant(payload.get("tenant_id") or "default")
 
-    if not tenant_id:
-        raise HTTPException(400, "Organisation ID is required.")
     if not username or not email or not password:
         raise HTTPException(400, "Username, email and password are required.")
     if "@" not in email:
@@ -147,7 +149,7 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
         }
 
     # ── OTP flow (REQUIRE_EMAIL_OTP=true) ─────────────────────────────────────
-    otp        = str(random.randint(100000, 999999))
+    otp        = str(secrets.randbelow(900000) + 100000)
     otp_hash   = hashlib.sha256(otp.encode()).hexdigest()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
@@ -384,3 +386,4 @@ def _send_reset_email(db, user, email: str, raw_token: str, tenant_id: str):
         logging.getLogger(__name__).error(
             "Failed to send password reset email to %s: %s", email, exc
         )
+

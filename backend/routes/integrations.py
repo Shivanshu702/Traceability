@@ -1,3 +1,4 @@
+
 # backend/routes/integrations.py
 """
 FastAPI routes for the Cogiscan + WATS integration layer.
@@ -17,7 +18,9 @@ Register in main.py:
 """
 from __future__ import annotations
 
+import hmac
 import logging
+import os
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -61,7 +64,7 @@ def _get_or_create_config(db: Session) -> IntegrationConfig:
     dependencies=[Depends(require_admin)],
 )
 def get_config(db: Session = Depends(get_db)):
-    return _get_or_create_config(db)
+    return IntegrationConfigOut.from_cfg(_get_or_create_config(db))
 
 
 @router.post(
@@ -85,7 +88,7 @@ def save_config(body: IntegrationConfigIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(cfg)
     log.info("Integration config saved by admin")
-    return cfg
+    return IntegrationConfigOut.from_cfg(cfg)
 
 
 # ── Cogiscan ───────────────────────────────────────────────────────────────────
@@ -156,6 +159,14 @@ async def cogiscan_webhook(request: Request, db: Session = Depends(get_db)):
     No auth required (Cogiscan uses shared-secret in body or header —
     add signature verification here if your Cogiscan server supports it).
     """
+    # SECURITY: shared-secret check. Cogiscan must send the same value in the
+    # X-Webhook-Secret header. If COGISCAN_WEBHOOK_SECRET is unset the endpoint
+    # is closed (fail-safe) rather than open.
+    expected = os.getenv("COGISCAN_WEBHOOK_SECRET", "")
+    provided = request.headers.get("X-Webhook-Secret", "")
+    if not expected or not hmac.compare_digest(provided.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
     cfg = _get_or_create_config(db)
     if not cfg.cogiscan_enabled or not cfg.smt_auto_create:
         # Integration disabled — acknowledge but do nothing
@@ -175,3 +186,4 @@ async def cogiscan_webhook(request: Request, db: Session = Depends(get_db)):
         except Exception as exc:
             log.error("Webhook: failed to process panel %s: %s", p.get("panel_id", "?"), exc)
             # Don't raise — acknowledge the webhook even on partial failures
+

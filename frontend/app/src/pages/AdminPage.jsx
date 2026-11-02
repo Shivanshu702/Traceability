@@ -1,12 +1,14 @@
 
+
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\AdminPage.jsx //
  
+import { invalidatePipeline } from "../hooks/usePipeline";
 import { IntegrationsTab } from "../routes/integrationRoutes";
 import React, { useState, useEffect } from "react";
 import {
   getAdminPipelineConfig, saveAdminPipelineConfig, resetPipelineConfig,
   getEmailSettings, saveEmailSettings, sendTestEmail,
-  listUsers, adminCreateUser, changeUserRole, adminResetPassword, deleteUser,
+  listUsers, adminCreateUser, changeUserRole, adminResetPassword, setUserEmail, deleteUser,
   getFeatures, listRoles, createRole, updateRole, deleteRole,
   downloadTraysCSV, downloadScanLogCSV, downloadReportXLSX,
   getAuditLog,
@@ -57,6 +59,7 @@ function UsersTab() {
   const [newName,     setNewName]     = useState("");
   const [newPw,       setNewPw]       = useState("");
   const [newRole,     setNewRole]     = useState("operator");
+  const [newEmail,    setNewEmail]    = useState("");
   const [msg,         setMsg]         = useState("");
   const [error,       setError]       = useState("");
   const [resetTarget, setResetTarget] = useState(null);
@@ -87,12 +90,12 @@ function UsersTab() {
     if (!newName.trim() || !newPw.trim()) { setError("Name and password required"); return; }
     setError(""); setMsg("");
     try {
-      const res = await adminCreateUser(newName.trim(), newPw.trim(), newRole);
+      const res = await adminCreateUser(newName.trim(), newPw.trim(), newRole, newEmail.trim());
       // FIX Bug 3b: was `!res?.detail` (inverted — triggered on every success).
       // Correct check: only show error when error/detail fields are present.
       if (res?.error || res?.detail) { setError(res.error || res.detail || "Failed to create user"); return; }
       setMsg(`✅ User "${newName}" created with role: ${newRole}`);
-      setNewName(""); setNewPw(""); setNewRole("operator");
+      setNewName(""); setNewPw(""); setNewRole("operator"); setNewEmail("");
       load();
     } catch (err) {
       setError(err.message || "Failed to create user");
@@ -161,7 +164,7 @@ function UsersTab() {
  
       <div style={card}>
         <div style={cardTitle}>{t("createUser")}</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:10, marginBottom:12 }}>
           <div>
             <div style={lbl}>{t("username")}</div>
             <input className="inp" placeholder="username" value={newName} onChange={e => setNewName(e.target.value)} />
@@ -169,6 +172,10 @@ function UsersTab() {
           <div>
             <div style={lbl}>{t("password")}</div>
             <input type="password" className="inp" placeholder="••••••" value={newPw} onChange={e => setNewPw(e.target.value)} />
+          </div>
+          <div>
+            <div style={lbl}>Email (for password reset)</div>
+            <input type="email" className="inp" placeholder="name@company.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} />
           </div>
           <div>
             <div style={lbl}>{t("role")}</div>
@@ -187,7 +194,7 @@ function UsersTab() {
         {loading ? <Spin /> : (
           <table className="tbl" style={{ margin:0 }}>
             <thead>
-              <tr><th>#</th><th>{t("username")}</th><th>{t("role")}</th><th>{t("actions")}</th></tr>
+              <tr><th>#</th><th>{t("username")}</th><th>Email</th><th>{t("role")}</th><th>{t("actions")}</th></tr>
             </thead>
             <tbody>
               {users.map((u, i) => (
@@ -196,6 +203,16 @@ function UsersTab() {
                   <td>
                     <span style={{ fontFamily:"monospace", fontSize:13 }}>{u.username}</span>
                     {u.username===currentUser && <span className="tag tag-blue" style={{ marginLeft:8, fontSize:10 }}>you</span>}
+                  </td>
+                  <td style={{ fontSize:12 }}>
+                    {u.email || <span style={{ color:"var(--muted)" }}>—</span>}{" "}
+                    <button className="btn" style={{ padding:"2px 8px", fontSize:11 }} title="Set email"
+                      onClick={async () => {
+                        const v = window.prompt(`Email for ${u.username} (blank to clear):`, u.email || "");
+                        if (v === null) return;
+                        try { await setUserEmail(u.username, v.trim()); load(); }
+                        catch (err) { setError(err.message || "Could not update email"); }
+                      }}>✎</button>
                   </td>
                   <td>
                     <select value={u.role} onChange={e => handleRoleChange(u.username, e.target.value)}
@@ -452,7 +469,7 @@ function EmailTab() {
           <Fld label="SMTP Host"><input className="inp" placeholder="smtp.gmail.com" value={settings.smtp_host} onChange={e => upd("smtp_host", e.target.value)} /></Fld>
           <Fld label="SMTP Port"><input className="inp" type="number" value={settings.smtp_port} onChange={e => upd("smtp_port", +e.target.value)} /></Fld>
           <Fld label="SMTP Username"><input className="inp" value={settings.smtp_user} onChange={e => upd("smtp_user", e.target.value)} /></Fld>
-          <Fld label="SMTP Password"><input type="password" className="inp" placeholder="••••••••" onChange={e => upd("smtp_password", e.target.value)} /></Fld>
+          <Fld label="SMTP Password"><input type="password" className="inp" placeholder={settings.smtp_password_set ? "•••••••• saved — type to replace" : "SMTP password"} onChange={e => upd("smtp_password", e.target.value)} /></Fld>
           <Fld label={`From ${t("email")}`}><input className="inp" value={settings.from_email} onChange={e => upd("from_email", e.target.value)} /></Fld>
           <Fld label="Use TLS">
             <select className="inp" value={settings.smtp_use_tls?"1":"0"} onChange={e => upd("smtp_use_tls", e.target.value==="1")}>
@@ -890,8 +907,8 @@ function PipelineTab() {
  
   async function save() {
     setSaving(true); setMsg(null);
-    try { await saveAdminPipelineConfig(config); setMsg({type:"ok",text:`✅ Pipeline ${t("save")}d — changes are live immediately.`}); }
-    catch { setMsg({type:"err",text:"❌ Save failed."}); }
+    try { await saveAdminPipelineConfig(config); invalidatePipeline(); setMsg({type:"ok",text:`✅ Pipeline ${t("save")}d — changes are live immediately.`}); }
+    catch (e) { setMsg({type:"err",text:`❌ Save failed — ${e.message}`}); }
     finally { setSaving(false); }
   }
  
@@ -900,10 +917,11 @@ function PipelineTab() {
     setSaving(true);
     try {
       const res = await resetPipelineConfig();
+      invalidatePipeline();
       setConfig(res.config);
       setMsg({type:"ok",text:"✅ Reset to defaults."});
-    } catch {
-      setMsg({type:"err",text:"❌ Reset failed."});
+    } catch (e) {
+      setMsg({type:"err",text:`❌ Reset failed — ${e.message}`});
     } finally {
       setSaving(false);
     }
@@ -919,7 +937,7 @@ function PipelineTab() {
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>Pipeline configurator</div>
           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2 }}>Changes apply immediately after saving.</div>
         </div>
-        <button className="btn" style={{ fontSize:12 }} onClick={handleReset}>↩ {t("reset defaults")}</button>
+        <button className="btn" style={{ fontSize:12 }} onClick={handleReset}>↩ {t("resetDefaults")}</button>
         <button className="btn btn-blue" style={{ padding:"10px 24px" }} onClick={save} disabled={saving}>
           {saving?t("loading") : `💾 ${t("save")} ${t("pipeline")}`}
         </button>
@@ -1152,3 +1170,4 @@ function EToggle({ value, onChange }) {
 const card      = { background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:16, marginBottom:0 };
 const cardTitle = { fontSize:12, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:14 };
 const lbl       = { fontSize:11, color:"var(--muted)", fontWeight:600 };
+

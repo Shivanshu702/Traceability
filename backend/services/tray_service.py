@@ -1,3 +1,4 @@
+
 # C:\SHIVANSH\Traceability\backend\services\tray_service.py
 
 from datetime import datetime, timezone
@@ -6,7 +7,7 @@ from models import Tray
 from services.fifo_service import check_fifo_violation
 from services.log_service import log_scan
 from services.pipeline_service import (
-    get_stage_def, get_branch_options, is_split_enabled,
+    get_stage_def, get_branch_options, is_split_enabled, is_terminal_stage,
 )
 
 SPLIT_MARKER = "SPLIT"
@@ -44,7 +45,7 @@ def advance_tray(
         }
 
     # ── Block: already complete ────────────────────────────────────────────────
-    if tray.stage == "COMPLETE":
+    if tray.stage == "COMPLETE" or tray.is_done:
         return {"error": f"{tray.id} is already complete.", "already_done": True}
 
     # ── FIFO check (warn + log, never block) ───────────────────────────────────
@@ -77,7 +78,7 @@ def advance_tray(
     tray.stage_entered_at = now
     tray.fifo_violated    = fifo_vio or tray.fifo_violated
 
-    if next_stage_id == "COMPLETE":
+    if is_terminal_stage(next_stage_id, config, project_id):
         tray.is_done      = True
         tray.completed_at = now
 
@@ -202,3 +203,4 @@ def _tray_dict(tray: Tray) -> dict:
         "stage_entered_at": tray.stage_entered_at.isoformat() if tray.stage_entered_at else None,
         "completed_at":     tray.completed_at.isoformat() if tray.completed_at else None,
     }
+

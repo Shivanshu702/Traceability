@@ -1,3 +1,4 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\LoginPage.jsx //
 
 import { useState } from "react";
@@ -47,7 +48,7 @@ export default function LoginPage({ onLogin, Controls }) {
       localStorage.setItem("role",      data.role      || "operator");
       localStorage.setItem("tenant_id", data.tenant_id || tenantId || "default");
       if (data.token) localStorage.setItem("token", data.token);
-      onLogin({ username: data.username || username, role: data.role || "operator", tenant_id: data.tenant_id || "default" });
+      onLogin({ username: data.username || username, role: data.role || "operator", tenant_id: data.tenant_id || "default", permissions: data.permissions });
     } catch { setError(t("cannotReachServer")); }
     finally   { setLoading(false); }
   }
@@ -319,3 +320,4 @@ export default function LoginPage({ onLogin, Controls }) {
     </div>
   );
 }
+

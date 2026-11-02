@@ -1,7 +1,9 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\ManageTraysPage.jsx //
 
 import { useState, useEffect } from "react";
 import { getAllTrays, getPipeline, bulkDeleteTrays, deleteTray } from "../api/api";
+import { buildStageMeta, stageColor as stageColorOf } from "../utils/pipelineUi";
 import { useLang } from "../context/LangContext";
 
 export default function ManageTraysPage() {
@@ -74,15 +76,7 @@ export default function ManageTraysPage() {
   const allStages     = [...new Set(trays.map(t => t.stage))].sort();
   const allProjects   = pipeline?.projects?.map(p => p.id) || [];
 
-  function stageColor(stage) {
-    const c = {
-      CREATED:"#888780", RACK1_TOP:"#378ADD", RACK2_BTM:"#7F77DD",
-      BAT_MOUNT:"#EF9F27", BAT_SOL_R:"#E24B4A", BAT_SOL_M:"#5DCAA5",
-      RACK3:"#D4537E", DEPANEL_IN:"#BA7517", TESTING:"#185FA5",
-      COMPLETE:"#3B6D11", SPLIT:"#FAC775",
-    };
-    return c[stage] || "#888780";
-  }
+  const stageColor = (stage) => stageColorOf(buildStageMeta(pipeline), stage);
 
   function fmtDate(iso) {
     if (!iso) return "—";
@@ -258,3 +252,4 @@ const inp    = { width:"100%", padding:"9px 12px", background:"var(--inp-bg)", b
 const lbl    = { fontSize:11, color:"var(--muted)", fontWeight:600, marginBottom:4 };
 const btnRed = { padding:"9px 18px", background:"var(--err-bg)", color:"var(--err-text)", border:"1px solid var(--err-border)", borderRadius:8, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" };
 const btnGray= { padding:"9px 16px", background:"var(--card)", color:"var(--text)", border:"1px solid var(--border)", borderRadius:8, fontSize:13, cursor:"pointer", fontFamily:"inherit" };
+

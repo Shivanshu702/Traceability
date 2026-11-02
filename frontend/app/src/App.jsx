@@ -1,5 +1,8 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\App.jsx //
 
+import { invalidatePipeline } from "./hooks/usePipeline";
+import { getMe } from "./api/api";
 import { useIntegrationContext, DEFAULT  } from "./context/IntegrationContext";
 import { SMT_NAV, SMT_ROUTE } from "./routes/integrationRoutes";
 import { useEffect, useState } from "react";
@@ -38,6 +41,22 @@ function RequireAuth({ user, children }) {
   return children;
 }
 
+// ── Feature wrapper: admin always passes; others need the feature in their role ──
+const can = (user, feature) => !!user && (user.role === "admin" || (user.permissions || []).includes(feature));
+
+function RequireFeature({ user, feature, children }) {
+  const location = useLocation();
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!can(user, feature)) return <Navigate to={firstAllowedPath(user)} replace />;
+  return children;
+}
+
+function firstAllowedPath(user) {
+  const order = [["dashboard", "/"], ["scan", "/scan"], ["history", "/history"], ["create_trays", "/create"], ["alerts", "/alerts"]];
+  const hit = order.find(([f]) => can(user, f));
+  return hit ? hit[1] : "/login";
+}
+
 // ── Admin-only wrapper ─────────────────────────────────────────────────────────
 function RequireAdmin({ user, children }) {
   if (!user || user.role !== "admin") {
@@ -45,6 +64,19 @@ function RequireAdmin({ user, children }) {
   }
   return children;
 }
+
+// ── QR deep link ───────────────────────────────────────────────────────────────
+// Printed QR codes encode  <FRONTEND_URL>?scan=<TRAY_ID>. Capture the id at module
+// load, before the router (or the login redirect) rewrites the URL, and clean it.
+(function captureScanDeepLink() {
+  try {
+    const id = new URLSearchParams(window.location.search).get("scan");
+    if (id && id.trim()) {
+      localStorage.setItem("pendingScan", id.trim().toUpperCase());
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  } catch { /* storage unavailable — ignore */ }
+})();
 
 // ── Inner app ──────────────────────────────────────────────────────────────────
 function AppShell() {
@@ -63,7 +95,15 @@ function AppShell() {
     const role      = localStorage.getItem("role");
     const tenant_id = localStorage.getItem("tenant_id") || "default";
     if (username) {
-      setUser({ username, role: role || "operator", tenant_id });
+      let permissions = [];
+      try { permissions = JSON.parse(localStorage.getItem("permissions") || "[]"); } catch { /* ignore */ }
+      setUser({ username, role: role || "operator", tenant_id, permissions });
+      // Refresh role + permissions from the server (an admin may have changed them).
+      getMe().then(me => {
+        localStorage.setItem("role", me.role);
+        localStorage.setItem("permissions", JSON.stringify(me.permissions || []));
+        setUser(u => u && ({ ...u, role: me.role, permissions: me.permissions || [] }));
+      }).catch(() => { /* 401 is handled by the api layer */ });
     }
   }, []);
 
@@ -71,14 +111,31 @@ function AppShell() {
     localStorage.setItem("username",  userData.username);
     localStorage.setItem("role",      userData.role);
     localStorage.setItem("tenant_id", userData.tenant_id || "default");
+    localStorage.setItem("permissions", JSON.stringify(userData.permissions || []));
     if (userData.token) {
       localStorage.setItem("token", userData.token);
     }
+    invalidatePipeline();
     refreshConfig();
     setUser(userData);
-    const from = location.state?.from?.pathname || "/";
+    if (!userData.permissions) {            // e.g. after registration: ask the server
+      getMe().then(me => {
+        localStorage.setItem("permissions", JSON.stringify(me.permissions || []));
+        setUser(u => u && ({ ...u, role: me.role, permissions: me.permissions || [] }));
+      }).catch(() => {});
+    }
+    const from = localStorage.getItem("pendingScan")
+      ? "/scan"                                   // continue the QR scan that started the login
+      : (location.state?.from?.pathname || "/");
     navigate(from, { replace: true });
   }
+
+  // Already signed in and a QR deep link is waiting → open the scan page.
+  useEffect(() => {
+    if (user && localStorage.getItem("pendingScan") && location.pathname !== "/scan") {
+      navigate("/scan", { replace: true });
+    }
+  }, [user, location.pathname]);
 
   async function logout() {
     await fetch(
@@ -88,7 +145,9 @@ function AppShell() {
     localStorage.removeItem("username");
     localStorage.removeItem("role");
     localStorage.removeItem("tenant_id");
+    localStorage.removeItem("permissions");
     localStorage.removeItem("token");
+    invalidatePipeline();
     setConfig(DEFAULT); 
     setUser(null);
     navigate("/login", { replace: true });
@@ -101,13 +160,13 @@ function AppShell() {
   // tab caused it to appear twice. OperatorReport kept as admin-only nav item
   // since it is a standalone report page, not embedded in Admin.
   const navTabs = [
-    { to: "/",        label: `📊 ${t("dashboard")}` },
-    { to: "/scan",    label: `📷 ${t("scan")}`      },
-    { to: "/history", label: `📋 ${t("history")}`   },
-    { to: "/create",  label: `➕ ${t("createTrays")}` },
+    ...(can(user, "dashboard")    ? [{ to: "/",        label: `📊 ${t("dashboard")}` }]   : []),
+    ...(can(user, "scan")         ? [{ to: "/scan",    label: `📷 ${t("scan")}` }]        : []),
+    ...(can(user, "history")      ? [{ to: "/history", label: `📋 ${t("history")}` }]     : []),
+    ...(can(user, "create_trays") ? [{ to: "/create",  label: `➕ ${t("createTrays")}` }] : []),
+    ...(can(user, "alerts")       ? [{ to: "/alerts",  label: `🚨 ${t("alerts")}` }]      : []),
     ...(isAdmin ? [
       { to: "/manage",          label: `🗂 ${t("manageTrays")}` },
-      { to: "/alerts",          label: `🚨 ${t("alerts")}`      },
       { to: "/admin",           label: `⚙ ${t("admin")}`        },
       { to: "/operator-report", label: `📊 ${t("operatorReport")}`     },
       { to: "/smt",             label: SMT_NAV.label },
@@ -225,16 +284,16 @@ function AppShell() {
           />
 
           <Route path="/" element={
-            <RequireAuth user={user}><Dashboard /></RequireAuth>
+            <RequireFeature user={user} feature="dashboard"><Dashboard /></RequireFeature>
           } />
           <Route path="/scan" element={
-            <RequireAuth user={user}><ScanPage /></RequireAuth>
+            <RequireFeature user={user} feature="scan"><ScanPage /></RequireFeature>
           } />
           <Route path="/history" element={
-            <RequireAuth user={user}><HistoryPage /></RequireAuth>
+            <RequireFeature user={user} feature="history"><HistoryPage /></RequireFeature>
           } />
           <Route path="/create" element={
-            <RequireAuth user={user}><CreateTraysPage /></RequireAuth>
+            <RequireFeature user={user} feature="create_trays"><CreateTraysPage /></RequireFeature>
           } />
           <Route path="/operator-report" element={
             <RequireAdmin user={user}><OperatorReportPage /></RequireAdmin>
@@ -246,7 +305,7 @@ function AppShell() {
             <RequireAdmin user={user}><ManageTraysPage /></RequireAdmin>
           } />
           <Route path="/alerts" element={
-            <RequireAdmin user={user}><AlertDashboard /></RequireAdmin>
+            <RequireFeature user={user} feature="alerts"><AlertDashboard /></RequireFeature>
           } />
           <Route path="/admin" element={
             <RequireAdmin user={user}><AdminPage /></RequireAdmin>
@@ -270,3 +329,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+

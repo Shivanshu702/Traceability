@@ -1,3 +1,4 @@
+
 # C:\SHIVANSH\Traceability\backend\schemas\__init__.py
 
 from __future__ import annotations
@@ -121,6 +122,7 @@ class BranchOption(BaseModel):
     color:    Optional[str] = "#888780"
     next:     Optional[str] = None
     scanNote: Optional[str] = ""
+    stuckLimitSeconds: Optional[int] = Field(default=7200, ge=0)
 
     @field_validator("id", "next", mode="before")
     @classmethod
@@ -198,8 +200,46 @@ class PipelineConfigIn(BaseModel):
                     f"branch.atStage '{self.branch.atStage}' is not a defined stage ID"
                 )
 
+        # ── Reference integrity ────────────────────────────────────────────
+        if "SPLIT" in stage_ids:
+            raise ValueError("'SPLIT' is a reserved ID and cannot be used for a stage")
+
+        branch_on  = bool(self.branch and self.branch.enabled)
+        option_ids = {o.id for o in self.branch.options} if branch_on else set()
+
+        if option_ids & stage_ids:
+            raise ValueError(
+                f"branch option IDs collide with stage IDs: {sorted(option_ids & stage_ids)}"
+            )
+        if len(option_ids) != (len(self.branch.options) if branch_on else 0):
+            raise ValueError("branch.options contains duplicate IDs")
+
+        for s in self.stages:
+            if s.next and s.next not in stage_ids | option_ids:
+                raise ValueError(f"stage '{s.id}' points to unknown next stage '{s.next}'")
+
+        if branch_on:
+            for o in self.branch.options:
+                if o.next and o.next not in stage_ids:
+                    raise ValueError(
+                        f"branch option '{o.id}' points to unknown next stage '{o.next}'"
+                    )
+
+        for p in (self.projects or []):
+            unknown = [x for x in (p.stageIds or []) if x.strip().upper() not in stage_ids]
+            if unknown:
+                raise ValueError(f"project '{p.id}' references unknown stages: {unknown}")
+
+        # A tray can only finish at a terminal stage (no `next`, not the branch point).
+        terminals = [s.id for s in self.stages
+                     if not s.next and not (branch_on and s.id == self.branch.atStage)]
+        if not terminals:
+            raise ValueError(
+                "The pipeline needs a final stage (a stage with no 'next') so trays can complete"
+            )
+
         return self
-    
+
 from schemas.integration import (
     IntegrationConfigIn,
     IntegrationConfigOut,
@@ -211,3 +251,4 @@ from schemas.integration import (
     CycleTimeStats,
     UnitTestResultOut,
 )
+

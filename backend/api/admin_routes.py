@@ -1,3 +1,4 @@
+
 # admin_routes.py
 
 import json as _json
@@ -18,6 +19,18 @@ from services.pipeline_service import (
 from services.email_service import get_email_settings, send_email
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _valid_role(db: Session, tid: str, role: str) -> bool:
+    if role in ("admin", "operator"):
+        return True
+    return db.query(RoleConfig).filter(
+        RoleConfig.tenant_id == tid, RoleConfig.name == role
+    ).first() is not None
+
+
+def _admin_count(db: Session, tid: str) -> int:
+    return db.query(User).filter(User.tenant_id == tid, User.role == "admin").count()
 
 
 # ── Pipeline config ───────────────────────────────────────────────────────────
@@ -82,6 +95,8 @@ def admin_create_user(
 
     if db.query(User).filter(User.tenant_id == tid, User.username == name).first():
         raise HTTPException(409, "User already exists")
+    if not _valid_role(db, tid, role):
+        raise HTTPException(400, f"Unknown role: {role}")
 
     new_user = User(tenant_id=tid, username=name, password=hash_password(pw), role=role, email=email)
     db.add(new_user)
@@ -97,6 +112,10 @@ def change_user_role(target_username: str, payload: dict, user: dict = Depends(r
     target   = db.query(User).filter(User.tenant_id == tid, User.username == target_username).first()
     if not target:
         raise HTTPException(404, "User not found")
+    if not _valid_role(db, tid, new_role):
+        raise HTTPException(400, f"Unknown role: {new_role}")
+    if target.role == "admin" and new_role != "admin" and _admin_count(db, tid) <= 1:
+        raise HTTPException(400, "Cannot demote the last admin of this organisation")
     target.role = new_role
     log_action(db, user["sub"], "CHANGE_USER_ROLE", f"target={target_username} role={new_role}", tid)
     db.commit()
@@ -137,6 +156,10 @@ def delete_user(target_username: str, user: dict = Depends(require_admin), db: S
     target = db.query(User).filter(User.tenant_id == tid, User.username == target_username).first()
     if not target:
         raise HTTPException(404, "User not found")
+    if target.username == user["sub"]:
+        raise HTTPException(400, "You cannot delete your own account")
+    if target.role == "admin" and _admin_count(db, tid) <= 1:
+        raise HTTPException(400, "Cannot delete the last admin of this organisation")
     db.delete(target)
     log_action(db, user["sub"], "DELETE_USER", f"target={target_username}", tid)
     db.commit()
@@ -220,7 +243,8 @@ def get_email_settings_route(user: dict = Depends(require_admin), db: Session = 
         "smtp_host":             s.smtp_host             if s else "",
         "smtp_port":             s.smtp_port             if s else 465,
         "smtp_user":             s.smtp_user             if s else "",
-        "smtp_password":         s.smtp_password         if s else "",
+        "smtp_password":         "",                       # write-only, never returned
+        "smtp_password_set":     bool(s and s.smtp_password),
         "smtp_use_tls":          bool(s.smtp_use_tls)   if s else True,
         "from_email":            s.from_email            if s else "",
         "alert_recipients":      s.alert_recipients      if s else "",
@@ -259,9 +283,12 @@ def save_email_settings_route(
         db.add(row)
 
     # String fields
-    for field in ("smtp_host", "smtp_user", "smtp_password", "from_email", "alert_recipients"):
+    for field in ("smtp_host", "smtp_user", "from_email", "alert_recipients"):
         if field in payload:
             setattr(row, field, str(payload[field]).strip())
+    # Password: only overwrite when a non-empty value is supplied.
+    if str(payload.get("smtp_password") or "").strip():
+        row.smtp_password = str(payload["smtp_password"]).strip()
 
     # Integer fields
     if "smtp_port" in payload:
@@ -293,3 +320,4 @@ def send_test_email(user: dict = Depends(require_admin), db: Session = Depends(g
     if not ok:
         raise HTTPException(500, "Email send failed. Check SMTP settings and server logs.")
     return {"ok": True, "sent_to": recipients}
+

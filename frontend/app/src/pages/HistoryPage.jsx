@@ -1,17 +1,11 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\HistoryPage.jsx //
 
 import { useState } from "react";
 import { getHistory } from "../api/api";
 import { useLang } from "../context/LangContext";
-
-const STAGE_COLORS = {
-  CREATED:"#888780", RACK1_TOP:"#378ADD", RACK2_BTM:"#7F77DD",
-  BAT_MOUNT:"#EF9F27", BAT_SOL_R:"#E24B4A", BAT_SOL_M:"#5DCAA5",
-  RACK3:"#D4537E", DEPANEL_IN:"#BA7517", TESTING:"#185FA5",
-  COMPLETE:"#3B6D11", SPLIT:"#FAC775",
-};
-
-function stageColor(stage) { return STAGE_COLORS[stage] || "#6B7E95"; }
+import { usePipeline } from "../hooks/usePipeline";
+import { stageColor as stageColorOf } from "../utils/pipelineUi";
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -38,6 +32,8 @@ function enrichWithDurations(events) {
 
 export default function HistoryPage() {
   const { t } = useLang();
+  const { meta } = usePipeline();
+  const stageColor = (stage) => stageColorOf(meta, stage);
   const [trayId,  setTrayId]  = useState("");
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -252,3 +248,4 @@ export default function HistoryPage() {
     </div>
   );
 }
+

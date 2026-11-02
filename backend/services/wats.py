@@ -1,3 +1,4 @@
+
 # backend/services/wats.py
 """
 WATS (Worldwide Assembly Test System) integration service.
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from models.integration import IntegrationConfig, SmtEvent, UnitTestResult
 
+from core.timeutil import shift_for
 log = logging.getLogger("wats")
 
 
@@ -134,6 +136,7 @@ def _parse_wats_result(raw: Dict[str, Any], db: Session):
         existing.test_duration_sec = duration_sec
         existing.test_started_at   = started_at
         existing.test_completed_at = completed_at
+        existing.smt_exit_at       = existing.smt_exit_at or smt_exit_at
         existing.measurements      = measurements
         existing.raw_wats_payload  = raw
         return False, existing
@@ -163,6 +166,8 @@ def _parse_wats_result(raw: Dict[str, Any], db: Session):
         failure_code      = fail_code,
         failure_step      = fail_step,
         run_number        = run_number,
+        retests           = run_number - 1,
+        shift             = shift_for(started_at),
         is_final_pass     = is_final_pass,
         measurements      = measurements,
         raw_wats_payload  = raw,
@@ -184,7 +189,9 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
     raw_results = await fetch_results(
         url     = config.wats_url,
         api_key = config.wats_api_key,
-        since   = config.wats_last_sync,
+        # 5-min overlap: upserts are idempotent (keyed on wats_result_id), so re-reading
+        # a few results is harmless while it closes gaps at the sync boundary.
+        since   = (config.wats_last_sync - timedelta(minutes=5)) if config.wats_last_sync else None,
     )
     results_pulled = len(raw_results)
 
@@ -193,6 +200,7 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
             is_new, record = _parse_wats_result(raw, db)
             if is_new:
                 db.add(record)
+                db.flush()      # so the next result for the same serial sees this run
                 results_created += 1
             else:
                 results_updated += 1
@@ -201,8 +209,9 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
             errors.append(f"Unit {serial}: {exc}")
             log.error("WATS upsert error for %s: %s", serial, exc)
 
-    # Update last sync timestamp
-    config.wats_last_sync = datetime.now(timezone.utc)
+    # Advance the cursor only after a clean run, so failed units are retried next time.
+    if not errors:
+        config.wats_last_sync = datetime.now(timezone.utc)
     try:
         db.commit()
     except Exception as exc:
@@ -215,3 +224,4 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
         "results_updated": results_updated,
         "errors":          errors,
     }
+

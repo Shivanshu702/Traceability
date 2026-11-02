@@ -1,6 +1,8 @@
+
 # C:\SHIVANSH\Traceability\backend\services\email_service.py
 
 import smtplib
+from html import escape as _esc
 import os
 import logging
 from email.mime.text import MIMEText
@@ -225,9 +227,9 @@ def send_fifo_alert(
     <table>
       <tr><th>Tray ID</th><th>Stage</th><th>Operator</th></tr>
       <tr>
-        <td><code>{tray_id}</code></td>
-        <td>{stage}</td>
-        <td>{operator}</td>
+        <td><code>{_esc(tray_id)}</code></td>
+        <td>{_esc(stage)}</td>
+        <td>{_esc(operator)}</td>
       </tr>
     </table>
     <p><strong>Older trays waiting at the same stage:</strong></p>
@@ -273,7 +275,7 @@ def send_stuck_alert(
     body  = f"""
     <p>
       <strong>{count}</strong> tray{'s' if count != 1 else ''} ha{'ve' if count != 1 else 's'}
-      not moved for more than <strong>{stuck_hours} hour{'s' if stuck_hours != 1 else ''}</strong>.
+      exceeded the time limit configured for their stage.
     </p>
     <table>
       <tr><th>Tray ID</th><th>Stage</th><th>Project</th><th>Stuck for</th></tr>
@@ -283,7 +285,7 @@ def send_stuck_alert(
 
     send_email(
         settings, recipients,
-        f"🕐 {count} Stuck Tray{'s' if count != 1 else ''} — {stuck_hours}h+ overdue",
+        f"🕐 {count} Stuck Tray{'s' if count != 1 else ''} — over stage time limit",
         _wrap("🕐 Stuck Tray Alert", body),
     )
 
@@ -358,7 +360,7 @@ def send_otp_email(db, email: str, username: str, otp: str, tenant_id: str = "de
     settings = get_email_settings(db, tenant_id)
     subject  = "Your Traceability System Registration Code"
     body     = _wrap("🔐 Verify Your Email", f"""
-        <p>Hi <strong>{username}</strong>,</p>
+        <p>Hi <strong>{_esc(username)}</strong>,</p>
         <p>Your one-time registration code is:</p>
         <div style="font-size:36px;font-weight:700;letter-spacing:10px;
                     text-align:center;padding:20px;background:#F3F4F6;
@@ -378,7 +380,7 @@ def send_password_reset_email(db, user, email: str, raw_token: str, tenant_id: s
     settings = get_email_settings(db, tenant_id)
     subject  = "Traceability System — Password Reset"
     body     = _wrap("🔑 Reset Your Password", f"""
-        <p>Hi <strong>{user.username}</strong>,</p>
+        <p>Hi <strong>{_esc(user.username)}</strong>,</p>
         <p>Your password reset token is:</p>
         <div style="font-size:18px;font-weight:700;letter-spacing:4px;
                     text-align:center;padding:16px;background:#F3F4F6;
@@ -388,7 +390,7 @@ def send_password_reset_email(db, user, email: str, raw_token: str, tenant_id: s
         </div>
         <p>Enter this token on the Reset Password page along with your new password.</p>
         <p style="color:#6B7280;font-size:12px">
-            This token expires in 30 minutes.
+            This token expires in 15 minutes.
             If you did not request this, please ignore this email.
         </p>
     """)
@@ -401,3 +403,4 @@ def _parse_recipients(raw: str) -> List[str]:
     if not raw:
         return []
     return [r.strip() for r in raw.split(",") if r.strip()]
+

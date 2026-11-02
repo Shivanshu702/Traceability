@@ -1,21 +1,11 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\Dashboard.jsx //
 
 import { useLang } from "../context/LangContext";
 import { useEffect, useState } from "react";
 import { getStats, getAllTrays, getPipeline, getScanLog } from "../api/api";
+import { buildStageMeta, themeOf, branchInfo } from "../utils/pipelineUi";
 
-const THEME = {
-  CREATED:    { bg:"#0E1520", accent:"#6B7E95", border:"#6B7E9540" },
-  RACK1_TOP:  { bg:"#091525", accent:"#378ADD", border:"#378ADD40" },
-  RACK2_BTM:  { bg:"#100E2A", accent:"#7F77DD", border:"#7F77DD40" },
-  BAT_MOUNT:  { bg:"#1A1000", accent:"#EF9F27", border:"#EF9F2740" },
-  BAT_SOL_R:  { bg:"#1A0808", accent:"#E24B4A", border:"#E24B4A40" },
-  BAT_SOL_M:  { bg:"#061A14", accent:"#5DCAA5", border:"#5DCAA540" },
-  RACK3:      { bg:"#190A14", accent:"#D4537E", border:"#D4537E40" },
-  DEPANEL_IN: { bg:"#150D00", accent:"#BA7517", border:"#BA751740" },
-  TESTING:    { bg:"#050D1C", accent:"#185FA5", border:"#185FA540" },
-  COMPLETE:   { bg:"#061309", accent:"#3B6D11", border:"#3B6D1140" },
-};
 
 const CHART_COLORS = [
   "#378ADD","#7F77DD","#EF9F27","#E24B4A",
@@ -71,7 +61,7 @@ function StatCard({ label, main, sub1, sub2, color, icon }) {
 // ── Pipeline stage card ────────────────────────────────────────────────────────
 // Stage cards keep their intentional tinted backgrounds for visual identity.
 function StageCard({ stage, count, units, totalTrays, onExpand }) {
-  const theme = THEME[stage.id] || THEME.CREATED;
+  const theme = themeOf(stage.color);
   const pct   = totalTrays > 0 ? Math.round((count / totalTrays) * 100) : 0;
   return (
     <div style={{
@@ -129,16 +119,19 @@ function StageCard({ stage, count, units, totalTrays, onExpand }) {
   );
 }
 
-// ── Branch breakdown modal ─────────────────────────────────────────────────────
-function BranchModal({ stats, onClose }) {
-  const solRCount = stats?.stage_counts?.["BAT_SOL_R"] || 0;
-  const solMCount = stats?.stage_counts?.["BAT_SOL_M"] || 0;
-  const solRUnits = stats?.stage_units?.["BAT_SOL_R"]  || 0;
-  const solMUnits = stats?.stage_units?.["BAT_SOL_M"]  || 0;
-  const batCount  = stats?.stage_counts?.["BAT_MOUNT"]  || 0;
-  const batUnits  = stats?.stage_units?.["BAT_MOUNT"]   || 0;
-  const total     = solRCount + solMCount + batCount;
-  const totalU    = solRUnits + solMUnits + batUnits;
+// ── Branch breakdown modal (generic: driven by the pipeline's branch config) ───
+function BranchModal({ stats, branch, meta, onClose }) {
+  const point      = branch.atStage;
+  const pointColor = meta[point]?.color || "#EF9F27";
+  const waitCount  = stats?.stage_counts?.[point] || 0;
+  const waitUnits  = stats?.stage_units?.[point]  || 0;
+  const rows = branch.options.map(o => ({
+    id: o.id, label: o.label, icon: o.icon, color: o.color || "#888780",
+    count: stats?.stage_counts?.[o.id] || 0,
+    units: stats?.stage_units?.[o.id]  || 0,
+  }));
+  const total  = waitCount + rows.reduce((n, r) => n + r.count, 0);
+  const totalU = waitUnits + rows.reduce((n, r) => n + r.units, 0);
 
   return (
     <div onClick={onClose} style={{
@@ -147,15 +140,15 @@ function BranchModal({ stats, onClose }) {
       justifyContent:"center", padding:24,
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:"var(--card)", border:"1px solid #EF9F2744",
-        borderTop:"3px solid #EF9F27", borderRadius:16,
+        background:"var(--card)", border:`1px solid ${pointColor}44`,
+        borderTop:`3px solid ${pointColor}`, borderRadius:16,
         padding:"24px 28px", width:"min(540px,96vw)",
         boxShadow:"var(--shadow-lg)",
       }}>
         <div style={{ display:"flex", alignItems:"center", marginBottom:20 }}>
           <div>
-            <div style={{ fontSize:15, fontWeight:700, color:"#EF9F27" }}>
-              Battery Mounted — Branch Breakdown
+            <div style={{ fontSize:15, fontWeight:700, color:pointColor }}>
+              {meta[point]?.label || point} — Branch Breakdown
             </div>
             <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>
               {total} total trays · {totalU.toLocaleString()} total units
@@ -169,87 +162,60 @@ function BranchModal({ stats, onClose }) {
           </button>
         </div>
 
-        {batCount > 0 && (
+        {waitCount > 0 && (
           <div style={{
-            background:"var(--warn-bg)", border:"1px solid var(--warn-border)",
-            borderLeft:"3px solid #EF9F27", borderRadius:10,
+            background:`${pointColor}14`, border:`1px solid ${pointColor}40`,
+            borderLeft:`3px solid ${pointColor}`, borderRadius:10,
             padding:"14px 18px", marginBottom:14,
           }}>
-            <div style={{ fontSize:12, fontWeight:700, color:"#EF9F27", marginBottom:8 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:pointColor, marginBottom:8 }}>
               ⏳ Awaiting Branch Selection
             </div>
             <div style={{ display:"flex", gap:24 }}>
               <div>
-                <div style={{ fontSize:28, fontWeight:700, color:"#EF9F27" }}>{batCount}</div>
-                <div style={{ fontSize:10, color:"#EF9F2766" }}>trays</div>
+                <div style={{ fontSize:28, fontWeight:700, color:pointColor }}>{waitCount}</div>
+                <div style={{ fontSize:10, color:"var(--muted)" }}>trays</div>
               </div>
               <div>
-                <div style={{ fontSize:28, fontWeight:700, color:"#EF9F27aa" }}>
-                  {batUnits.toLocaleString()}
-                </div>
-                <div style={{ fontSize:10, color:"#EF9F2744" }}>units</div>
+                <div style={{ fontSize:28, fontWeight:700, color:pointColor, opacity:.7 }}>{waitUnits.toLocaleString()}</div>
+                <div style={{ fontSize:10, color:"var(--muted)" }}>units</div>
               </div>
             </div>
           </div>
         )}
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-          <div style={{
-            background:"var(--err-bg)", border:"1px solid #E24B4A33",
-            borderTop:"3px solid #E24B4A", borderRadius:10, padding:"16px 18px",
-          }}>
-            <div style={{ fontSize:11, fontWeight:700, color:"#E24B4A", marginBottom:12 }}>
-              🤖 Soldered by Robot
-            </div>
-            <div style={{ display:"flex", gap:20 }}>
-              <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#E24B4A", lineHeight:1 }}>{solRCount}</div>
-                <div style={{ fontSize:10, color:"#E24B4A77", marginTop:3 }}>trays</div>
-              </div>
-              <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#E24B4Aaa", lineHeight:1 }}>{solRUnits.toLocaleString()}</div>
-                <div style={{ fontSize:10, color:"#E24B4A55", marginTop:3 }}>units</div>
-              </div>
-            </div>
-            {total > 0 && (
-              <div style={{ marginTop:14 }}>
-                <div style={{ height:3, background:"#E24B4A1A", borderRadius:2, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:Math.round((solRCount/total)*100)+"%", background:"#E24B4A", borderRadius:2 }}/>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12 }}>
+          {rows.map(r => {
+            const pct = total > 0 ? Math.round((r.count / total) * 100) : 0;
+            return (
+              <div key={r.id} style={{
+                background:`${r.color}14`, border:`1px solid ${r.color}33`,
+                borderTop:`3px solid ${r.color}`, borderRadius:10, padding:"16px 18px",
+              }}>
+                <div style={{ fontSize:11, fontWeight:700, color:r.color, marginBottom:12 }}>
+                  {r.icon ? r.icon + " " : ""}{r.label}
                 </div>
-                <div style={{ fontSize:9, color:"#E24B4A88", marginTop:3 }}>
-                  {Math.round((solRCount/total)*100)}% of total
+                <div style={{ display:"flex", gap:20 }}>
+                  <div>
+                    <div style={{ fontSize:32, fontWeight:700, color:r.color, lineHeight:1 }}>{r.count}</div>
+                    <div style={{ fontSize:10, color:"var(--muted)", marginTop:3 }}>trays</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:32, fontWeight:700, color:r.color, opacity:.7, lineHeight:1 }}>{r.units.toLocaleString()}</div>
+                    <div style={{ fontSize:10, color:"var(--muted)", marginTop:3 }}>units</div>
+                  </div>
                 </div>
+                {total > 0 && (
+                  <div style={{ marginTop:14 }}>
+                    <div style={{ height:3, background:`${r.color}1A`, borderRadius:2, overflow:"hidden" }}>
+                      <div style={{ height:"100%", width:pct+"%", background:r.color, borderRadius:2 }}/>
+                    </div>
+                    <div style={{ fontSize:9, color:"var(--muted)", marginTop:3 }}>{pct}% of total</div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div style={{
-            background:"var(--ok-bg)", border:"1px solid #5DCAA533",
-            borderTop:"3px solid #5DCAA5", borderRadius:10, padding:"16px 18px",
-          }}>
-            <div style={{ fontSize:11, fontWeight:700, color:"#5DCAA5", marginBottom:12 }}>
-              ✋ Soldered by Hand
-            </div>
-            <div style={{ display:"flex", gap:20 }}>
-              <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#5DCAA5", lineHeight:1 }}>{solMCount}</div>
-                <div style={{ fontSize:10, color:"#5DCAA577", marginTop:3 }}>trays</div>
-              </div>
-              <div>
-                <div style={{ fontSize:32, fontWeight:700, color:"#5DCAA5aa", lineHeight:1 }}>{solMUnits.toLocaleString()}</div>
-                <div style={{ fontSize:10, color:"#5DCAA555", marginTop:3 }}>units</div>
-              </div>
-            </div>
-            {total > 0 && (
-              <div style={{ marginTop:14 }}>
-                <div style={{ height:3, background:"#5DCAA51A", borderRadius:2, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:Math.round((solMCount/total)*100)+"%", background:"#5DCAA5", borderRadius:2 }}/>
-                </div>
-                <div style={{ fontSize:9, color:"#5DCAA588", marginTop:3 }}>
-                  {Math.round((solMCount/total)*100)}% of total
-                </div>
-              </div>
-            )}
-          </div>
+            );
+          })}
         </div>
         <div style={{ marginTop:16, fontSize:10, color:"var(--muted)", textAlign:"center" }}>
           Click outside to close
@@ -260,11 +226,11 @@ function BranchModal({ stats, onClose }) {
 }
 
 // ── Stage group (expandable tray list) ─────────────────────────────────────────
-function StageGroup({ stage, trays }) {
+function StageGroup({ stage, trays, meta }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
 
-  const theme      = THEME[stage.id] || THEME.CREATED;
+  const theme      = themeOf(stage.color);
   const totalUnits = trays.reduce((sum, tray) => sum + (tray.total_units || 0), 0);
 
   return (
@@ -314,7 +280,7 @@ function StageGroup({ stage, trays }) {
                 const ageH = tr.last_updated
                   ? Math.round(((Date.now() - new Date(tr.last_updated)) / 3600000) * 10) / 10
                   : "—";
-                const stg = THEME[tr.stage] || THEME.CREATED;
+                const stg = themeOf(meta?.[tr.stage]?.color);
                 return (
                   <tr key={tr.id}>
                     <td>
@@ -576,8 +542,11 @@ export default function Dashboard() {
   const projects    = pipeline.projects || [];
   const stages      = pipeline.stages   || [];
 
+  const meta   = buildStageMeta(pipeline);
+  const branch = branchInfo(pipeline);
+
   const nonSplitTrays = trays.filter(tray => tray.stage !== "SPLIT");
-  const activeTrays   = nonSplitTrays.filter(tray => tray.stage !== "COMPLETE");
+  const activeTrays   = nonSplitTrays.filter(tray => !tray.is_done);
 
   const byStage = {};
   activeTrays.forEach(tray => {
@@ -585,23 +554,17 @@ export default function Dashboard() {
     byStage[tray.stage].push(tray);
   });
 
-  const batMountDisplay = [
-    ...(byStage["BAT_MOUNT"] || []),
-    ...(byStage["BAT_SOL_R"] || []),
-    ...(byStage["BAT_SOL_M"] || []),
-  ];
-
-  const batMountCount = (stats.stage_counts?.["BAT_MOUNT"] || 0)
-                      + (stats.stage_counts?.["BAT_SOL_R"] || 0)
-                      + (stats.stage_counts?.["BAT_SOL_M"] || 0);
-  const batMountUnits = (stats.stage_units?.["BAT_MOUNT"]  || 0)
-                      + (stats.stage_units?.["BAT_SOL_R"]  || 0)
-                      + (stats.stage_units?.["BAT_SOL_M"]  || 0);
+  // Trays at the branch decision stage and at any of its branch options are shown together.
+  const groupIds = branch ? [branch.atStage, ...branch.optionIds] : [];
+  const batMountDisplay = groupIds.flatMap(id => byStage[id] || []);
+  const sumOf = (m) => groupIds.reduce((n, id) => n + (m?.[id] || 0), 0);
+  const batMountCount = sumOf(stats.stage_counts);
+  const batMountUnits = sumOf(stats.stage_units);
 
   const total         = stats.total_active + stats.total_complete;
   const pct           = total > 0 ? Math.round((stats.total_complete / total) * 100) : 0;
   const totalUnitsAll = nonSplitTrays.reduce((sum, tray) => sum + (tray.total_units || 0), 0);
-  const totalScans    = scanLog.length;
+  const totalScans    = stats.total_scans ?? scanLog.length;   // real DB count, not the 500-row log window
   const fifoRate      = total > 0
     ? Math.round(((total - (stats.fifo_violated || 0)) / total) * 100)
     : 100;
@@ -724,16 +687,16 @@ export default function Dashboard() {
               {i > 0 && <span style={{ color:"var(--muted)", fontSize:14, flexShrink:0 }}>›</span>}
               <StageCard
                 stage={s}
-                count={s.id === "BAT_MOUNT" ? batMountCount : (stats.stage_counts?.[s.id] || 0)}
-                units={s.id === "BAT_MOUNT" ? batMountUnits : (stats.stage_units?.[s.id]  || 0)}
+                count={branch && s.id === branch.atStage ? batMountCount : (stats.stage_counts?.[s.id] || 0)}
+                units={branch && s.id === branch.atStage ? batMountUnits : (stats.stage_units?.[s.id]  || 0)}
                 totalTrays={total}
-                onExpand={s.id === "BAT_MOUNT" ? () => setBranchModal(true) : undefined}
+                onExpand={branch && s.id === branch.atStage ? () => setBranchModal(true) : undefined}
               />
             </div>
           ))}
         </div>
 
-        {branchModal && <BranchModal stats={stats} onClose={() => setBranchModal(false)} />}
+        {branchModal && branch && <BranchModal stats={stats} branch={branch} meta={meta} onClose={() => setBranchModal(false)} />}
 
         <div style={{ marginTop:14 }}>
           <div style={{ height:4, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
@@ -860,18 +823,18 @@ export default function Dashboard() {
         </div>
       ) : (
         stages.map(s => {
-          if (s.id === "BAT_MOUNT") {
+          if (branch && s.id === branch.atStage) {
             if (batMountDisplay.length === 0) return null;
             return (
-              <StageGroup key="bat_group"
-                stage={{ ...s, label:"Battery Mounted & Soldering" }}
+              <StageGroup key="branch_group" meta={meta}
+                stage={{ ...s, label:`${s.label} & branches` }}
                 trays={batMountDisplay}
               />
             );
           }
-          if (s.id === "BAT_SOL_R" || s.id === "BAT_SOL_M") return null;
+          if (branch && branch.optionIds.includes(s.id)) return null;
           if (!byStage[s.id]) return null;
-          return <StageGroup key={s.id} stage={s} trays={byStage[s.id]} />;
+          return <StageGroup key={s.id} meta={meta} stage={s} trays={byStage[s.id]} />;
         })
       )}
     </div>
@@ -887,3 +850,4 @@ function pill(active) {
     color:       active ? "#378ADD" : "var(--muted)",
   };
 }
+

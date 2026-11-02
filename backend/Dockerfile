@@ -1,3 +1,4 @@
+
 # ── Build stage ───────────────────────────────────────────────────────────────
 # Pin Python 3.11 (stable LTS). Render was defaulting to 3.14 (bleeding edge).
 # Using slim to minimise image size and attack surface.
@@ -34,7 +35,7 @@ EXPOSE 10000
 ENV PORT=10000
 ENV WORKERS=2
 
-CMD gunicorn main:app \
+CMD alembic upgrade head && exec gunicorn main:app \
     --workers ${WORKERS} \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 0.0.0.0:${PORT} \
@@ -42,3 +43,5 @@ CMD gunicorn main:app \
     --keep-alive 5 \
     --access-logfile - \
     --error-logfile -
+
+

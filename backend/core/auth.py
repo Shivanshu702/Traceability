@@ -1,3 +1,4 @@
+
 # C:\SHIVANSH\Traceability\backend\core\auth.py
 
 import os
@@ -12,7 +13,13 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User
 
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-in-production")
+_DEFAULT_SECRET = "dev-only-change-in-production"
+SECRET_KEY = os.getenv("SECRET_KEY", _DEFAULT_SECRET)
+if os.getenv("ENV", "production") == "production" and SECRET_KEY == _DEFAULT_SECRET:
+    raise RuntimeError(
+        "SECRET_KEY is not set. Refusing to start in production with the "
+        "default signing key. Set SECRET_KEY to a long random value."
+    )
 ALGORITHM  = "HS256"
 TOKEN_TTL  = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
 
@@ -115,3 +122,5 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 def tenant(user: dict) -> str:
     return user.get("tenant_id", "default")
+
+

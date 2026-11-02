@@ -1,3 +1,4 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\api\api.js //
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
@@ -25,7 +26,20 @@ async function req(method, path, body) {
     throw new Error("SESSION_EXPIRED");
   }
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    // Surface the server's own explanation (FastAPI sends {"detail": "..."} or a
+    // list of validation errors) instead of a bare "HTTP 422".
+    let msg = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      const d = data?.detail;
+      if (typeof d === "string") msg = d;
+      else if (Array.isArray(d)) msg = d.map(x => x.msg || JSON.stringify(x)).join("; ");
+    } catch { /* non-JSON body */ }
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }
 
@@ -93,15 +107,29 @@ export async function forgotPasswordConfirm(token, new_password) {
 }
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
+export const getMe = () => req("GET", "/me");
 export const getPipeline             = ()       => req("GET",  "/pipeline");
 export const getAdminPipelineConfig  = ()       => req("GET",  "/admin/pipeline-config");
 export const saveAdminPipelineConfig = (config) => req("PUT",  "/admin/pipeline-config", config);
 export const resetPipelineConfig     = ()       => req("POST", "/admin/pipeline-config/reset");
 
 // ── Trays ─────────────────────────────────────────────────────────────────────
+// Fetches EVERY matching tray by following the server's pagination (the endpoint
+// returns at most 500 per call). Hard-capped so a runaway tenant cannot freeze the UI.
+const TRAY_PAGE = 500;
+const TRAY_CAP  = 10000;
 export async function getAllTrays(params = {}) {
-  const data = await req("GET", "/trays?" + new URLSearchParams(params));
-  return Array.isArray(data) ? data : (data?.trays ?? []);
+  const out = [];
+  let offset = 0;
+  for (;;) {
+    const data = await req("GET", "/trays?" + new URLSearchParams({ ...params, limit: TRAY_PAGE, offset }));
+    if (Array.isArray(data)) return data;                // legacy response shape
+    const page = data?.trays ?? [];
+    out.push(...page);
+    offset += page.length;
+    if (!page.length || offset >= (data?.total ?? 0) || out.length >= TRAY_CAP) break;
+  }
+  return out;
 }
 
 export const getTray         = (id)    => req("GET",    `/tray/${id}`);
@@ -139,7 +167,8 @@ export const getAuditLog = (limit = 100) => req("GET", `/audit-log?limit=${limit
 
 // ── User management (admin) ───────────────────────────────────────────────────
 export const listUsers          = ()                         => req("GET",    "/admin/users");
-export const adminCreateUser    = (username, password, role) => req("POST",   "/admin/users", { username, password, role });
+export const adminCreateUser    = (username, password, role, email) => req("POST",   "/admin/users", { username, password, role, email: email || null });
+export const setUserEmail       = (username, email)                   => req("PUT",    `/admin/users/${encodeURIComponent(username)}/email`, { email });
 export const changeUserRole     = (username, role)           => req("PUT",    `/admin/users/${username}/role`, { role });
 export const adminResetPassword = (username, password)       => req("PUT",    `/admin/users/${username}/password`, { password });
 export const deleteUser         = (username)                 => req("DELETE", `/admin/users/${username}`);
@@ -177,3 +206,4 @@ async function _dl(path, filename) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+

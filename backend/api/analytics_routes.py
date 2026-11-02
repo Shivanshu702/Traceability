@@ -1,4 +1,5 @@
 
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, case, and_, distinct
 from sqlalchemy.orm import Session
@@ -8,6 +9,7 @@ from core.auth import get_current_user, require_admin, tenant
 from core.cache import stats_cache, stage_load_cache
 from services.analytics_service import detect_bottlenecks, stage_load, get_analytics
 from datetime import date, datetime, timedelta
+from core.timeutil import utc_today_start # type: ignore
 from typing import Optional
 
 router = APIRouter(tags=["analytics"])
@@ -29,20 +31,20 @@ def get_stats(
     if project:
         base.append(Tray.project == project)
 
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_start = utc_today_start()
 
     row = db.query(
-        func.sum(case((Tray.stage != "COMPLETE", 1), else_=0)).label("total_active"),
-        func.sum(case((Tray.stage != "COMPLETE", func.coalesce(Tray.total_units, 0)), else_=0)).label("total_active_units"),
-        func.sum(case((Tray.stage == "COMPLETE", 1), else_=0)).label("total_complete"),
-        func.sum(case((Tray.stage == "COMPLETE", func.coalesce(Tray.total_units, 0)), else_=0)).label("total_complete_units"),
+        func.sum(case((Tray.is_done == False, 1), else_=0)).label("total_active"),
+        func.sum(case((Tray.is_done == False, func.coalesce(Tray.total_units, 0)), else_=0)).label("total_active_units"),
+        func.sum(case((Tray.is_done == True, 1), else_=0)).label("total_complete"),
+        func.sum(case((Tray.is_done == True, func.coalesce(Tray.total_units, 0)), else_=0)).label("total_complete_units"),
         func.sum(case((Tray.fifo_violated == True, 1), else_=0)).label("fifo_violated"),
         func.sum(case(
-            (and_(Tray.stage == "COMPLETE", Tray.completed_at >= today_start), 1),
+            (and_(Tray.is_done == True, Tray.completed_at >= today_start), 1),
             else_=0,
         )).label("completed_today"),
         func.sum(case(
-            (and_(Tray.stage == "COMPLETE", Tray.completed_at >= today_start),
+            (and_(Tray.is_done == True, Tray.completed_at >= today_start),
              func.coalesce(Tray.total_units, 0)),
             else_=0,
         )).label("completed_today_units"),
@@ -52,7 +54,7 @@ def get_stats(
         Tray.stage,
         func.count(Tray.id).label("cnt"),
         func.sum(func.coalesce(Tray.total_units, 0)).label("units"),
-    ).filter(*base, Tray.stage != "COMPLETE").group_by(Tray.stage).all()
+    ).filter(*base, Tray.is_done == False).group_by(Tray.stage).all()
 
     stage_counts = {r.stage: r.cnt   for r in stage_rows}
     stage_units  = {r.stage: r.units for r in stage_rows}
@@ -214,27 +216,33 @@ def weekly_stats(
         func.sum(func.coalesce(Tray.total_units, 0)).label("units"),
     ).filter(
         Tray.tenant_id == tid,
-        Tray.stage     == "COMPLETE",
+        Tray.is_done   == True,
         Tray.completed_at >= since,
     ).group_by(func.date(Tray.completed_at)).order_by(func.date(Tray.completed_at)).all()
 
-    # Shift comparison — trays created per shift per week
+    # Shift comparison — trays created per shift per ISO week. Grouped by day in
+    # SQL and bucketed into weeks in Python (date_trunc is Postgres-only).
     shift_rows = db.query(
         Tray.shift,
-        func.date_trunc("week", Tray.created_at).label("week_start"),
+        func.date(Tray.created_at).label("day"),
         func.count(Tray.id).label("cnt"),
     ).filter(
         Tray.tenant_id  == tid,
         Tray.created_at >= since,
         Tray.shift      != "",
         Tray.stage      != "SPLIT",
-    ).group_by(Tray.shift, func.date_trunc("week", Tray.created_at)).order_by(func.date_trunc("week", Tray.created_at)).all()
+    ).group_by(Tray.shift, func.date(Tray.created_at)).all()
 
-    # Aggregate shift data by week
     shifts: dict = {}
     for r in shift_rows:
-        wk = str(r.week_start)[:10] if r.week_start else "unknown"
-        shifts.setdefault(wk, {})[r.shift or "Unknown"] = r.cnt
+        try:
+            d = r.day if isinstance(r.day, date) else date.fromisoformat(str(r.day)[:10])
+        except ValueError:
+            continue
+        wk = (d - timedelta(days=d.weekday())).isoformat()
+        bucket = shifts.setdefault(wk, {})
+        bucket[r.shift or "Unknown"] = bucket.get(r.shift or "Unknown", 0) + r.cnt
+    shifts = dict(sorted(shifts.items()))
 
     return {
         "period_weeks": weeks,
@@ -274,3 +282,4 @@ def get_audit_log(
         }
         for l in logs
     ]
+

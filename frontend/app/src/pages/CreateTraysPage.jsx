@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { createTrays, getPipeline } from "../api/api";
 import { useLang } from "../context/LangContext";
@@ -70,7 +71,7 @@ export default function CreateTraysPage() {
       return `
         <div style="display:inline-block;width:200px;margin:10px;border:3px solid ${borderColor};border-radius:10px;padding:12px;text-align:center;font-family:monospace;page-break-inside:avoid;background:#fff;position:relative;">
           ${!isParent ? `<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:${borderColor};color:#fff;font-size:9px;font-weight:bold;padding:2px 8px;border-radius:0 0 6px 6px;">${typeLabel}</div>` : ""}
-          <img src="data:image/png;base64,${qr || tr.qr_base64}" style="width:160px;height:160px;display:block;margin:12px auto 8px"/>
+          <img src="data:image/png;base64,${qr}" style="width:160px;height:160px;display:block;margin:12px auto 8px"/>
           <div style="font-size:12px;font-weight:bold;color:#111;letter-spacing:1px">${id}</div>
           <div style="font-size:10px;color:#555;margin-top:3px">${tr.project}</div>
           <div style="font-size:9px;color:#888">${tr.shift} · ${tr.batch_no || "No batch"}</div>
@@ -183,8 +184,8 @@ export default function CreateTraysPage() {
               {splitEnabled ? (
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
                   <QRCard qr={tr.qr_base64}        id={tr.id}          labelColor="#378ADD" badge="PARENT"  units={projUnits}          note="Archived after split" />
-                  <QRCard qr={tr.child_qr_a || tr.qr_base64} id={`${tr.id}-A`} labelColor="#E24B4A" badge="PART A"   units={halfUnits}           />
-                  <QRCard qr={tr.child_qr_b || tr.qr_base64} id={`${tr.id}-B`} labelColor="#5DCAA5" badge="PART B"   units={projUnits - halfUnits} />
+                  <QRCard qr={tr.child_qr_a} id={`${tr.id}-A`} labelColor="#E24B4A" badge="PART A"   units={halfUnits}           />
+                  <QRCard qr={tr.child_qr_b} id={`${tr.id}-B`} labelColor="#5DCAA5" badge="PART B"   units={projUnits - halfUnits} />
                 </div>
               ) : (
                 <QRCard qr={tr.qr_base64} id={tr.id} labelColor="#378ADD" units={projUnits} />
@@ -235,3 +236,4 @@ const S = {
   btnBlue:   { padding:"10px 20px", background:"var(--accent-dk)", color:"var(--accent-text)", border:"none", borderRadius:8, fontSize:13, fontWeight:700, cursor:"pointer" },
   btnSmall:  { padding:"5px 10px", background:"var(--inp-bg)", color:"var(--muted)", border:"1px solid var(--border)", borderRadius:6, fontSize:11, cursor:"pointer" },
 };
+

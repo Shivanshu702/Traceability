@@ -1,3 +1,4 @@
+
 # backend/schemas/integration.py
 """
 Pydantic v2 schemas for the integration config API.
@@ -42,9 +43,24 @@ class IntegrationConfigOut(IntegrationConfigIn):
     """Response for GET /api/integrations/config — adds read-only timestamps"""
     model_config = ConfigDict(from_attributes=True)
 
+    # Secrets are write-only: never sent back to the browser.
+    cogiscan_api_key:     str  = ""
+    wats_api_key:         str  = ""
+    cogiscan_api_key_set: bool = False
+    wats_api_key_set:     bool = False
+
     cogiscan_last_sync: Optional[datetime] = None
     wats_last_sync:     Optional[datetime] = None
     updated_at:         Optional[datetime] = None
+
+    @classmethod
+    def from_cfg(cls, cfg):
+        out = cls.model_validate(cfg)
+        out.cogiscan_api_key_set = bool(cfg.cogiscan_api_key)
+        out.wats_api_key_set     = bool(cfg.wats_api_key)
+        out.cogiscan_api_key = ""
+        out.wats_api_key     = ""
+        return out
 
 
 # ── Connection test result ─────────────────────────────────────────────────────
@@ -101,7 +117,7 @@ class UnitTestResultOut(BaseModel):
 
     id:                int
     unit_serial:       str
-    tray_id:           str
+    tray_id:           Optional[str] = None
     smt_exit_at:       Optional[datetime] = None
     test_started_at:   Optional[datetime] = None
     test_completed_at: Optional[datetime] = None
@@ -112,3 +128,4 @@ class UnitTestResultOut(BaseModel):
     retests:           int = 0
     shift:             Optional[str]      = None
     project:           Optional[str]      = None
+

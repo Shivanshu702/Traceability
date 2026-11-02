@@ -1,4 +1,5 @@
 
+
 import json
 from sqlalchemy.orm import Session
 from models import PipelineConfig
@@ -199,6 +200,33 @@ def is_split_enabled(project_id: str | None, config: dict) -> bool:
     return global_enabled
 
 
+def is_terminal_stage(stage_id: str, config: dict, project_id: str | None = None) -> bool:
+    """True when reaching `stage_id` finishes the tray.
+
+    A stage is terminal when it has no `next` and is not the branch decision
+    point. The legacy id "COMPLETE" is always terminal. This is what makes a
+    custom final stage (e.g. "FINISHED") complete trays correctly.
+    """
+    if stage_id == "COMPLETE":
+        return True
+    branch_cfg = config.get("branch", {})
+    if branch_cfg.get("enabled") and branch_cfg.get("atStage") == stage_id:
+        return False
+    sd = get_stage_def(stage_id, config, project_id)
+    return bool(sd) and not sd.get("next")
+
+
+def get_stuck_limits(config: dict) -> dict:
+    """stage_id -> seconds, from the tenant's pipeline config (UI-editable).
+    Falls back to the built-in defaults, then 3600 s."""
+    limits = {}
+    for s in config.get("stages", []):
+        limits[s["id"]] = s.get("stuckLimitSeconds") or STAGE_STUCK_LIMITS.get(s["id"], 3600)
+    for b in config.get("branch", {}).get("options", []):
+        limits.setdefault(b["id"], b.get("stuckLimitSeconds") or STAGE_STUCK_LIMITS.get(b["id"], 7200))
+    return limits
+
+
 def get_units_for_project_cfg(project_id: str, config: dict) -> int:
     """Return total units per tray for a project from the pipeline config."""
     for proj in config.get("projects", []):
@@ -207,3 +235,5 @@ def get_units_for_project_cfg(project_id: str, config: dict) -> int:
                 (proj.get("panels", 50)) * (proj.get("unitsPerPanel", 9))
             )
     return config.get("tray", {}).get("unitsPerTray", 450)
+
+

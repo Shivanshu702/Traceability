@@ -1,10 +1,12 @@
+
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, or_, func, case
 from sqlalchemy.orm import Session
 
 from models import Tray, ScanEvent
-from core.stages import STAGE_STUCK_LIMITS
+from services.pipeline_service import get_pipeline_config, get_stuck_limits
+from core.timeutil import as_aware
 
 
 # ── Bottleneck detection ──────────────────────────────────────────────────────
@@ -13,8 +15,12 @@ def detect_bottlenecks(db: Session, tenant_id: str = "default") -> list:
 
     now = datetime.now(timezone.utc)
 
+    # Limits come from the tenant's pipeline config, so custom stages and the
+    # thresholds edited in the Admin UI are honoured.
+    limits = get_stuck_limits(get_pipeline_config(db, tenant_id))
+
     stage_clauses = []
-    for stage, limit_seconds in STAGE_STUCK_LIMITS.items():
+    for stage, limit_seconds in limits.items():
         if not limit_seconds:
             continue
         cutoff = now - timedelta(seconds=limit_seconds)
@@ -57,8 +63,7 @@ def detect_bottlenecks(db: Session, tenant_id: str = "default") -> list:
             continue
         # CRIT-4 FIX: make arrival timezone-aware if it somehow came back naive
         # (rows inserted before the migration used naive datetimes).
-        if arrival.tzinfo is None:
-            arrival = arrival.replace(tzinfo=timezone.utc)
+        arrival = as_aware(arrival)
         elapsed = (now - arrival).total_seconds()
         bottlenecks.append({
             "tray_id":       t.id,
@@ -104,39 +109,43 @@ def get_analytics(db: Session, tenant_id: str = "default") -> dict:
     stage-dwell scan event scan at 10,000 rows.
     """
 
-    # ── Totals via SQL aggregation (no Python-side row loading) ───────────────
+    # ── Totals via SQL aggregation (portable: SQLite + Postgres) ──────────────
     row = db.query(
         func.count(Tray.id).label("total"),
-        func.sum(
-            case((Tray.completed_at.isnot(None), 1), else_=0)
-        ).label("completed"),
-        func.avg(
-            case(
-                (
-                    and_(
-                        Tray.completed_at.isnot(None),
-                        Tray.created_at.isnot(None),
-                    ),
-                    func.extract("epoch", Tray.completed_at - Tray.created_at),
-                ),
-                else_=None,
-            )
-        ).label("avg_cycle"),
-    ).filter(Tray.tenant_id == tenant_id).one()
+        func.sum(case((Tray.is_done == True, 1), else_=0)).label("completed"),
+    ).filter(Tray.tenant_id == tenant_id, Tray.stage != "SPLIT").one()
 
     total     = int(row.total or 0)
     completed = int(row.completed or 0)
     wip       = total - completed
-    avg_cycle = round(float(row.avg_cycle or 0), 1)
 
-
-    events = (
-        db.query(ScanEvent)
-        .filter(ScanEvent.tenant_id == tenant_id)
-        .order_by(ScanEvent.tray_id, ScanEvent.timestamp)
+    # Average cycle time over the 10k most recent completions, computed in
+    # Python so it works on every database (extract(epoch) is not portable).
+    done_rows = (
+        db.query(Tray.created_at, Tray.completed_at)
+        .filter(Tray.tenant_id == tenant_id, Tray.completed_at.isnot(None),
+                Tray.created_at.isnot(None))
+        .order_by(Tray.completed_at.desc())
         .limit(10_000)
         .all()
     )
+    cycles = [
+        (as_aware(c).timestamp() - as_aware(cr).timestamp())
+        for cr, c in done_rows
+    ]
+    cycles = [x for x in cycles if x >= 0]
+    avg_cycle = round(sum(cycles) / len(cycles), 1) if cycles else 0.0
+
+    # Stage dwell: the 20k MOST RECENT events (not "first 10k by tray id"),
+    # regrouped per tray and walked in time order.
+    events = (
+        db.query(ScanEvent)
+        .filter(ScanEvent.tenant_id == tenant_id)
+        .order_by(ScanEvent.timestamp.desc())
+        .limit(20_000)
+        .all()
+    )
+    events.sort(key=lambda e: (e.tray_id or "", e.timestamp or datetime.min))
 
     stage_time:  dict = {}
     stage_count: dict = {}

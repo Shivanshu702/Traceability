@@ -1,7 +1,9 @@
+
 # C:\SHIVANSH\Traceability\backend\services\scheduler_service.py
 
 import asyncio
 import logging
+from core.timeutil import as_aware
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -128,21 +130,21 @@ def _send_daily_summary():
                 if settings.daily_summary_hour != current_hour:
                     continue
 
-                today     = date.today()
+                today     = datetime.now(timezone.utc).date()
                 all_trays = db.query(Tray).filter(Tray.tenant_id == tid).all()
 
                 stage_counts: dict = {}
                 for t in all_trays:
-                    if t.stage not in ("COMPLETE", "SPLIT"):
+                    if not t.is_done and t.stage != "SPLIT":
                         stage_counts[t.stage] = stage_counts.get(t.stage, 0) + 1
 
                 stats = {
-                    "total_active":    sum(1 for t in all_trays if t.stage not in ("COMPLETE", "SPLIT")),
-                    "total_complete":  sum(1 for t in all_trays if t.stage == "COMPLETE"),
+                    "total_active":    sum(1 for t in all_trays if not t.is_done and t.stage != "SPLIT"),
+                    "total_complete":  sum(1 for t in all_trays if t.is_done),
                     "fifo_violated":   sum(1 for t in all_trays if t.fifo_violated),
                     "completed_today": sum(
                         1 for t in all_trays
-                        if t.stage == "COMPLETE"
+                        if t.is_done
                         and t.completed_at
                         and t.completed_at.date() == today
                     ),
@@ -177,7 +179,7 @@ def _cogiscan_poll_task():
             # Respect the configured interval — scheduler ticks every 30s
             # but only actually syncs once enough time has passed
             if cfg.cogiscan_last_sync:
-                elapsed = (datetime.now(timezone.utc) - cfg.cogiscan_last_sync).total_seconds()
+                elapsed = (datetime.now(timezone.utc) - as_aware(cfg.cogiscan_last_sync)).total_seconds()
                 if elapsed < cfg.cogiscan_poll_sec:
                     logger.debug(
                         "Cogiscan poll skipped — %ds elapsed, interval=%ds",
@@ -219,9 +221,35 @@ def _wats_scheduled_task():
 
 # ── Lifecycle ──────────────────────────────────────────────────────────────────
 
+_lock_handle = None
+
+
+def _acquire_scheduler_lock() -> bool:
+    global _lock_handle
+    if os.getenv("RUN_SCHEDULER", "true").lower() == "false":
+        return False
+    try:
+        import fcntl, tempfile
+        path = os.path.join(tempfile.gettempdir(), "mes_scheduler.lock")
+        _lock_handle = open(path, "w")
+        fcntl.flock(_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except ImportError:          # Windows / no fcntl — single-process dev
+        return True
+    except OSError:              # lock held by another worker
+        return False
+
+
 def start_scheduler():
     """Start the background scheduler. Called on app startup."""
     if scheduler.running:
+        return
+
+    # Several gunicorn workers each import the app. Only ONE may run the scheduler,
+    # otherwise alerts / summaries / syncs fire once per worker. An OS file lock
+    # elects the owner (released automatically when that process exits).
+    if not _acquire_scheduler_lock():
+        logger.info("Scheduler owned by another worker — not starting here")
         return
 
     scheduler.add_job(
@@ -277,3 +305,4 @@ def stop_scheduler():
     if scheduler.running:
         scheduler.shutdown(wait=False)
         logger.info("APScheduler stopped")
+

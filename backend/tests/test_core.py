@@ -1,7 +1,8 @@
 
+
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -104,7 +105,7 @@ class TestAdvanceTray:
 
     def test_stage_entered_at_updated_on_advance(self, db, default_pipeline):
         """stage_entered_at must be refreshed to now on every advance."""
-        before = datetime.utcnow() - timedelta(seconds=1)
+        before = datetime.now(timezone.utc) - timedelta(seconds=1)
         t      = make_tray(db, "TRY001", stage="CREATED")
         advance_tray(db, t, config=default_pipeline)
         assert t.stage_entered_at is not None
@@ -298,3 +299,4 @@ class TestStuckAlertDedup:
             t.last_stuck_alert_at is None or t.last_stuck_alert_at < cutoff
         )
         assert should_alert is True
+

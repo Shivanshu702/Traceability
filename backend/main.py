@@ -1,4 +1,5 @@
 
+
 import logging
 import logging.config
 import os
@@ -209,8 +210,13 @@ app.include_router(smt_analytics_router)
 
 # FIX: dev_routes is ONLY registered outside of production.
 # In production (ENV=production) the /dev/* endpoints do not exist at all.
-# if ENV != "production":
-from api.dev_routes import router as dev_router
-app.include_router(dev_router)
+# SECURITY: /dev/* exists only outside production, unless explicitly enabled
+# with ENABLE_DEV_ROUTES=true (it is still protected by DEV_KEY).
+if ENV != "production" or os.getenv("ENABLE_DEV_ROUTES", "").lower() == "true":
+    from api.dev_routes import router as dev_router
+    app.include_router(dev_router)
+    logger.warning("Developer routes (/dev/*) are ENABLED")
 
 from models import integration as _integration_models  # noqa: F401
+
+

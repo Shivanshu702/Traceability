@@ -1,3 +1,4 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\IntegrationsTab.jsx
 
 import { useEffect, useState } from "react";
@@ -163,13 +164,13 @@ export default function IntegrationsTab() {
             <Toggle
               value={config.smt_auto_create}
               onChange={v => upd("smt_auto_create", v)}
-              label="Auto-create trays from SMT panels"
-              sublabel="When on: QR printing is hidden and tray records are created automatically from Cogiscan DataMatrix data."
+              label="Accept SMT panel events pushed by Cogiscan (webhook)"
+              sublabel="When on: panel and unit SMT events sent to the webhook are stored for SMT analytics and unit traceability. Trays are still created on the Create Trays page."
             />
 
             {config.smt_auto_create && (
               <div className="note-box" style={{ marginBottom: 12 }}>
-                ℹ️ Manual tray creation on the <strong>Create Trays</strong> page will be hidden while this is active. Cogiscan becomes the source of truth for tray creation.
+                ℹ️ The webhook must send the header <code>X-Webhook-Secret</code> (server variable <code>COGISCAN_WEBHOOK_SECRET</code>). Polling works without it.
               </div>
             )}
 
@@ -179,7 +180,7 @@ export default function IntegrationsTab() {
                   onChange={e => upd("cogiscan_url", e.target.value)} />
               </Row>
               <Row label="API Key">
-                <input type="password" className="inp" placeholder="••••••••••••" value={config.cogiscan_api_key}
+                <input type="password" className="inp" placeholder={config.cogiscan_api_key_set ? "•••••••• saved — type to replace" : "API key"} value={config.cogiscan_api_key}
                   onChange={e => upd("cogiscan_api_key", e.target.value)} />
               </Row>
             </div>
@@ -207,7 +208,7 @@ export default function IntegrationsTab() {
                 </button>
               </div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 5 }}>
-                Configure this URL in Cogiscan's event forwarding settings for push mode (faster than polling).
+                Configure this URL in Cogiscan's event forwarding and send the header <code>X-Webhook-Secret</code> with the value of the server's <code>COGISCAN_WEBHOOK_SECRET</code>.
               </div>
             </div>
 
@@ -242,7 +243,7 @@ export default function IntegrationsTab() {
           value={config.wats_enabled}
           onChange={v => upd("wats_enabled", v)}
           label="Enable WATS integration"
-          sublabel="Pull pass/fail results from WATS when a tray reaches the Testing stage."
+          sublabel="Pull unit pass/fail results from WATS for SMT analytics (scheduled or on demand)."
         />
 
         {config.wats_enabled && (
@@ -253,15 +254,14 @@ export default function IntegrationsTab() {
                   onChange={e => upd("wats_url", e.target.value)} />
               </Row>
               <Row label="API Key">
-                <input type="password" className="inp" placeholder="••••••••••••" value={config.wats_api_key}
+                <input type="password" className="inp" placeholder={config.wats_api_key_set ? "•••••••• saved — type to replace" : "API key"} value={config.wats_api_key}
                   onChange={e => upd("wats_api_key", e.target.value)} />
               </Row>
             </div>
 
             <Row label="Sync mode">
-              <select className="inp" style={{ width: "auto" }} value={config.wats_sync_mode}
+              <select className="inp" style={{ width: "auto" }} value={config.wats_sync_mode === "auto" ? "scheduled" : config.wats_sync_mode}
                 onChange={e => upd("wats_sync_mode", e.target.value)}>
-                <option value="auto">Auto-sync when tray reaches Testing stage</option>
                 <option value="scheduled">Scheduled (every hour)</option>
                 <option value="manual">Manual only</option>
               </select>
@@ -296,15 +296,16 @@ export default function IntegrationsTab() {
 
       {/* ── How it works ───────────────────────────────────────────────────── */}
       <div style={{ marginTop: 24, background: "var(--note-bg)", border: "1px solid var(--note-border)", borderRadius: 10, padding: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--note-text)", marginBottom: 10 }}>ℹ️ How SMT auto-create works</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--note-text)", marginBottom: 10 }}>ℹ️ How the SMT / WATS integration works</div>
         <ol style={{ paddingLeft: 18, fontSize: 12, color: "var(--note-text)", lineHeight: 1.9, margin: 0 }}>
           <li>A panel exits your SMT line and Cogiscan records its DataMatrix code.</li>
           <li>Your backend polls Cogiscan (or receives a webhook push) and reads the panel ID, unit count, and project.</li>
-          <li>A tray record is automatically created and placed at your first post-SMT pipeline stage.</li>
-          <li>Operators continue scanning normally at downstream stages — no QR printing needed.</li>
-          <li>When the tray reaches Testing, WATS sync pulls pass/fail per unit and updates the SMT Analytics page.</li>
+          <li>Panel and unit SMT events are stored, so every unit has its SMT entry/exit time.</li>
+          <li>Trays are created and scanned through the normal QR flow — the two systems are independent for now.</li>
+          <li>WATS sync (hourly, or the button above) pulls pass/fail per unit and updates the SMT Analytics page: yield, first-pass yield, cycle time and unit journey.</li>
         </ol>
       </div>
     </div>
   );
 }
+

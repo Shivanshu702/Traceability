@@ -1,3 +1,4 @@
+
 /**
  * src/context/LangContext.jsx
  *
@@ -38,6 +39,9 @@ const translations = {
 
   // ── English ──────────────────────────────────────────────────────────────
   en: {
+    integrations: "Integrations",
+    createUser: "Create user",
+    critical: "Critical",
     action:"Action",
     actions:"Actions",
     activeOperators:"Active operators",
@@ -3125,3 +3129,4 @@ export function LangProvider({ children }) {
 export function useLang() {
   return useContext(LangContext);
 }
+

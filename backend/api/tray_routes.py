@@ -1,3 +1,4 @@
+
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -12,7 +13,7 @@ from models import ScanEvent, Tray
 from schemas import BulkDeleteIn, BulkScanIn, ScanIn, TraysCreateIn
 from services.audit_service import log_action
 from services.email_service import send_fifo_alert
-from services.pipeline_service import get_pipeline_config, get_units_for_project_cfg
+from services.pipeline_service import get_pipeline_config, get_units_for_project_cfg, is_split_enabled
 from services.qr_service import generate_qr_base64, generate_qr_bytes
 from services.tray_service import advance_tray, _tray_dict
 
@@ -95,7 +96,12 @@ def create_trays(
             stage_entered_at = now,
         )
         db.add(tray)
-        created.append({**_tray_dict(tray), "qr_base64": generate_qr_base64(tray_id)})
+        entry = {**_tray_dict(tray), "qr_base64": generate_qr_base64(tray_id)}
+        if is_split_enabled(t.project or "", cfg):
+            # Part A/B labels must encode the CHILD ids (the parent is blocked after a split).
+            entry["child_qr_a"] = generate_qr_base64(f"{tray_id}-A")
+            entry["child_qr_b"] = generate_qr_base64(f"{tray_id}-B")
+        created.append(entry)
 
     db.commit()
     stats_cache.invalidate_prefix(f"stats:{tid}")
@@ -334,3 +340,4 @@ def get_scan_log(
     )
     return {"total": total, "limit": limit, "offset": offset,
             "events": [_event_dict(e) for e in events]}
+

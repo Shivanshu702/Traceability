@@ -1,6 +1,7 @@
 
+
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from models import Tray, ScanEvent
 from services.tray_service import advance_tray, _tray_dict
@@ -11,7 +12,7 @@ from services.tray_service import advance_tray, _tray_dict
 def make_tray(db, tray_id="TRY001", stage="CREATED", project="CD2_PRO",
               tenant_id="default", total_units=450, parent_id=None,
               is_split_parent=False):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     t = Tray(
         id               = tray_id,
         tenant_id        = tenant_id,
@@ -343,3 +344,4 @@ class TestFullPipeline:
         db.refresh(child_b)
         assert child_b.stage   == "BAT_MOUNT"
         assert child_b.is_done is False
+

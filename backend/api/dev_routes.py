@@ -1,3 +1,4 @@
+
 # C:\SHIVANSH\Traceability\backend\api\dev_routes.py
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -7,7 +8,7 @@ from database import get_db
 from models import User, Tray
 from core.auth import hash_password
 from core.rate_limit import limiter, DEV_LIMIT
-import os
+import os, hmac
 
 router = APIRouter(prefix="/dev", tags=["developer"])
 
@@ -16,7 +17,7 @@ def _check_dev_key(provided: str) -> None:
     dev_key = os.getenv("DEV_KEY", "").strip()
     if not dev_key:
         raise HTTPException(403, "DEV_KEY is not configured on this server.")
-    if not provided or provided.strip() != dev_key:
+    if not provided or not hmac.compare_digest(provided.strip().encode(), dev_key.encode()):
         raise HTTPException(403, "Invalid developer key.")
 
 
@@ -105,3 +106,5 @@ def dev_list_tenants(request: Request, payload: dict, db: Session = Depends(get_
         }
         for r in rows
     ]
+
+

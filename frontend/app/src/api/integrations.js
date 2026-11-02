@@ -1,6 +1,7 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\api\integrations.js
 
-const BASE = "https://traceability-backend-37dm.onrender.com";
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
 async function _iapi(path, opts = {}) {
   const token = localStorage.getItem("token");
@@ -11,7 +12,11 @@ async function _iapi(path, opts = {}) {
       ...(opts.headers || {}) },
     ...opts,
   });
-  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (res.status === 401) {
+    ["role", "username", "tenant_id", "token"].forEach(k => localStorage.removeItem(k));
+    if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+    throw new Error("SESSION_EXPIRED");
+  }
   if (!res.ok) {
     let detail = "Request failed";
     try { detail = (await res.json()).detail || detail; } catch {}
@@ -68,3 +73,4 @@ export async function downloadUnitJourney(project = "") {
     a.click();
     URL.revokeObjectURL(url);
 }
+

@@ -1,12 +1,16 @@
+
 // C:\SHIVANSH\Traceability\frontend\app\src\pages\ScanPage.jsx //
 
 import { useState, useEffect } from "react";
 import { scanTray, getTray } from "../api/api";
 import QRScanner from "../components/QRScanner";
 import { useLang } from "../context/LangContext";
+import { usePipeline } from "../hooks/usePipeline";
+import { stageColor as stageColorOf, stageLabel } from "../utils/pipelineUi";
 
 export default function ScanPage() {
   const { t } = useLang();
+  const { meta } = usePipeline();
 
   const [trayId,      setTrayId]      = useState("");
   const [operator,    setOperator]    = useState(
@@ -19,12 +23,6 @@ export default function ScanPage() {
   const [branch,      setBranch]      = useState(null);
   const [success,     setSuccess]     = useState("");
   const [scanNote,    setScanNote]    = useState("");
-
-  // Defined outside component to avoid recreation on every render
-  const BRANCH_OPTIONS = [
-    { id: "BAT_SOL_R", label: "Battery Soldered by Robot", icon: "🤖" },
-    { id: "BAT_SOL_M", label: "Battery Soldered by Hand",  icon: "✋" },
-  ];
 
   // Auto-load pending QR scan from URL redirect
   useEffect(() => {
@@ -120,7 +118,8 @@ export default function ScanPage() {
     setSuccess(""); setScanNote(""); setBranch(null);
   }
 
-  const isBranch      = tray && tray.stage === "BAT_MOUNT" && !tray.is_done;
+  const isBranch      = !!(tray && tray.is_branch_point);
+  const branchOptions = tray?.branch_options || [];
   const isSplitParent = tray && tray.is_split_parent;
   const isDone        = tray && tray.is_done;
 
@@ -208,7 +207,7 @@ export default function ScanPage() {
           {/* Stage */}
           <p style={{ marginBottom: 10, color: "var(--muted)", fontSize: 13 }}>
             {t("stage")}:{" "}
-            <span style={{ ...stageColor(tray.stage), fontWeight: 700 }}>{tray.stage}</span>
+            <span style={{ color: stageColorOf(meta, tray.stage), fontWeight: 700 }}>{stageLabel(meta, tray.stage)}</span>
           </p>
 
           {/* Info pills */}
@@ -239,7 +238,7 @@ export default function ScanPage() {
                   <p style={{ color: "var(--warn-text)", fontSize: 13, marginBottom: 10 }}>
                     ⚡ {t("selectSoldering")}
                   </p>
-                  {BRANCH_OPTIONS.map(b => (
+                  {branchOptions.map(b => (
                     <button key={b.id} onClick={() => setBranch(b.id)}
                       style={{
                         ...S.branchBtn,
@@ -247,7 +246,7 @@ export default function ScanPage() {
                         background: branch === b.id ? "rgba(55,138,221,.08)" : "var(--surface)",
                         color: "var(--text)",
                       }}>
-                      <span style={{ fontSize: 22 }}>{b.icon}</span>
+                      <span style={{ fontSize: 22 }}>{b.icon || "➜"}</span>
                       <span style={{ fontWeight: 700 }}>{b.label}</span>
                     </button>
                   ))}
@@ -255,10 +254,10 @@ export default function ScanPage() {
                     style={{
                       ...S.btnPrimary, width: "100%", marginTop: 10,
                       padding: 14, fontSize: 15,
-                      opacity: (!branch || loading) ? 0.5 : 1,
+                      opacity: (!branch || loading || !operator.trim()) ? 0.5 : 1,
                     }}
                     onClick={() => doScan(null, branch)}
-                    disabled={!branch || loading}>
+                    disabled={!branch || loading || !operator.trim()}>
                     {loading ? t("loading") : "✔ " + t("confirmBranch")}
                   </button>
                 </div>
@@ -286,14 +285,4 @@ export default function ScanPage() {
       )}
     </div>
   );
-}
-
-function stageColor(stage) {
-  const c = {
-    CREATED:"var(--muted)", RACK1_TOP:"#378ADD", RACK2_BTM:"#7F77DD",
-    BAT_MOUNT:"#EF9F27",    BAT_SOL_R:"#E24B4A", BAT_SOL_M:"#5DCAA5",
-    RACK3:"#D4537E",        DEPANEL_IN:"#BA7517", TESTING:"#185FA5",
-    COMPLETE:"#3B6D11",     SPLIT:"#FAC775",
-  };
-  return { color: c[stage] || "var(--text)" };
 }

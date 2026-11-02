@@ -1,3 +1,4 @@
+
 # backend/services/cogiscan.py
 """
 Cogiscan SMT traceability integration service.
@@ -14,7 +15,7 @@ Adjust endpoint paths to match your specific Cogiscan server version.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -188,7 +189,8 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
     panels = await fetch_new_panels(
         url     = config.cogiscan_url,
         api_key = config.cogiscan_api_key,
-        since   = config.cogiscan_last_sync,
+        # 2-min overlap closes boundary gaps; panel creation is idempotent (dedup by panel_id).
+        since   = (config.cogiscan_last_sync - timedelta(minutes=2)) if config.cogiscan_last_sync else None,
     )
     panels_found = len(panels)
 
@@ -203,8 +205,9 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
             panels_skipped += 1
             errors.append(f"Panel {panel.get('panel_id', '?')}: {exc}")
 
-    # Update last sync timestamp
-    config.cogiscan_last_sync = datetime.now(timezone.utc)
+    # Advance the cursor only after a clean run so failed panels are retried.
+    if not errors:
+        config.cogiscan_last_sync = datetime.now(timezone.utc)
     db.commit()
 
     return {
@@ -213,3 +216,4 @@ async def run_sync(db: Session, config: IntegrationConfig) -> Dict[str, Any]:
         "panels_skipped": panels_skipped,
         "errors":         errors,
     }
+

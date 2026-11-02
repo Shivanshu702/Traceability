@@ -1,3 +1,4 @@
+
 # C:\SHIVANSH\Traceability\backend\routes\analytics_smt.py
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ router = APIRouter(tags=["analytics-smt"])
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _today_utc() -> datetime:
-    return datetime.combine(date.today(), datetime.min.time()).replace(tzinfo=timezone.utc)
+    n = datetime.now(timezone.utc)
+    return datetime(n.year, n.month, n.day, tzinfo=timezone.utc)
 
 
 # ── SMT dashboard summary ─────────────────────────────────────────────────────
@@ -51,7 +53,7 @@ def smt_summary(db: Session = Depends(get_db)):
     ).scalar() or 0
 
     # First pass yield — units with no retests
-    fpy_q     = db.query(UnitTestResult).filter(UnitTestResult.retests == 0)
+    fpy_q     = db.query(UnitTestResult).filter(UnitTestResult.run_number == 1)
     fpy_total = fpy_q.count()
     fpy_pass  = fpy_q.filter(UnitTestResult.status == "PASS").count()
     fpy_pct   = round((fpy_pass / fpy_total) * 100, 1) if fpy_total > 0 else None
@@ -113,7 +115,7 @@ def yield_trend(
         ).label("passed"),
     ).filter(
         UnitTestResult.test_started_at >= cutoff,
-        UnitTestResult.retests == 0,    # first-pass only
+        UnitTestResult.run_number == 1,    # first-pass only
     ).group_by(
         cast(UnitTestResult.test_started_at, Date)
     ).order_by(
@@ -353,3 +355,4 @@ def unit_journey_export(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=unit_journey.csv"},
     )
+
