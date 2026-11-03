@@ -79,12 +79,10 @@ def _get_email_for_user(user):
 @router.post("/register")
 @limiter.limit(AUTH_LIMIT)
 def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
-    if not OPEN_REGISTRATION:
-        raise HTTPException(403, "Open registration is disabled. Contact your admin.")
-
     name      = payload.username.strip()
     pw        = payload.password
     tenant_id = _validate_tenant(payload.tenant_id or "default")
+    _require_registration_open(db, tenant_id)
 
     existing = db.query(User).filter(User.tenant_id == tenant_id, User.username == name).first()
     if existing:
@@ -103,6 +101,16 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
     return {"message": "User created", "role": user.role, "tenant_id": tenant_id}
 
 
+def _require_registration_open(db: Session, tenant_id: str) -> None:
+    """OPEN_REGISTRATION=false closes ALL self-service registration paths.
+    Exception: a tenant with no users yet may create its first (admin) account,
+    otherwise a fresh deployment could never be set up."""
+    if OPEN_REGISTRATION:
+        return
+    if db.query(User).filter(User.tenant_id == tenant_id).first():
+        raise HTTPException(403, "Registration is closed. Ask your administrator to create your account.")
+
+
 # ── register / send-otp ────────────────────────────────────────────────────────
 
 @router.post("/register/send-otp")
@@ -118,6 +126,7 @@ def register_send_otp(request: Request, payload: dict, db: Session = Depends(get
     password  = payload.get("password") or ""
     confirm   = payload.get("confirm_password") or ""
     tenant_id = _validate_tenant(payload.get("tenant_id") or "default")
+    _require_registration_open(db, tenant_id)
 
     if not username or not email or not password:
         raise HTTPException(400, "Username, email and password are required.")

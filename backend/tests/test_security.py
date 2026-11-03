@@ -113,3 +113,23 @@ def test_production_refuses_default_secret(monkeypatch):
         importlib.import_module("core.auth")
     monkeypatch.setenv("SECRET_KEY", "x")
     sys.modules.pop("core.auth", None)
+
+
+# ── OPEN_REGISTRATION=false must close EVERY registration path ──────────────────
+
+def test_closed_registration_allows_only_first_admin(client, monkeypatch):
+    import api.auth_routes as ar
+    monkeypatch.setattr(ar, "OPEN_REGISTRATION", False)
+    otp_body = lambda u: {"username": u, "email": f"{u}@x.com", "password": "secret1",
+                          "confirm_password": "secret1"}
+    # fresh database: the first account (admin) can be created through the UI's flow
+    r1 = client.post("/register/send-otp", json=otp_body("boss"))
+    assert r1.status_code == 200, r1.text
+    h = _login(client, "boss", "secret1")
+    assert client.get("/me", headers=h).json()["role"] == "admin"
+    # afterwards, no self-registration on any endpoint
+    assert client.post("/register/send-otp", json=otp_body("intruder")).status_code == 403
+    assert client.post("/register", json={"username": "intruder2", "password": "secret1"}).status_code == 403
+    # admins can still create users
+    assert client.post("/admin/users", json={"username": "op", "password": "secret1", "role": "operator"},
+                       headers=h).status_code in (200, 201)

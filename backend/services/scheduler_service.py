@@ -13,10 +13,12 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mes.db")
+from database import engine
 
 # ── Scheduler setup with persistent SQLAlchemy job store ──────────────────────
-jobstores    = {"default": SQLAlchemyJobStore(url=DATABASE_URL, tablename="apscheduler_jobs")}
+# Reuse the app's engine: same normalised URL/driver (postgres:// → psycopg2) and the
+# same connection pool — no second pool competing for the database's connection limit.
+jobstores    = {"default": SQLAlchemyJobStore(engine=engine, tablename="apscheduler_jobs")}
 executors    = {"default": ThreadPoolExecutor(max_workers=2)}
 job_defaults = {"coalesce": True, "max_instances": 1}
 
@@ -221,6 +223,20 @@ def _wats_scheduled_task():
 _lock_handle = None
 
 
+def _secure_jobstore_table() -> None:
+    """APScheduler creates `apscheduler_jobs` itself (not via Alembic). On Supabase, enable
+    Row Level Security on it too so the public REST API cannot read it. No-op elsewhere."""
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            if conn.dialect.name != "postgresql":
+                return
+            if conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = 'anon'")).first():
+                conn.execute(text("ALTER TABLE public.apscheduler_jobs ENABLE ROW LEVEL SECURITY"))
+    except Exception as exc:          # never block startup on a hardening step
+        logger.warning("Could not enable RLS on apscheduler_jobs: %s", exc)
+
+
 def _acquire_scheduler_lock() -> bool:
     global _lock_handle
     if os.getenv("RUN_SCHEDULER", "true").lower() == "false":
@@ -290,6 +306,7 @@ def start_scheduler():
     )
 
     scheduler.start()
+    _secure_jobstore_table()
     logger.info(
         "APScheduler started with SQLAlchemy job store — "
         "stuck-tray check (hourly) + daily summary (per-tenant hour)"
